@@ -38,7 +38,22 @@ This repo is a **skeleton**: the real, working code, fully sanitized, plus the c
 
 ---
 
-## 📱 Screenshots
+## 🖼️ Screenshots
+
+### Desktop
+
+<table>
+  <tr>
+    <td align="center" width="50%"><img src="docs/screenshots/desktop-live-browser.png" alt="Live Browser panel beside the terminal"><br><sub><b>Terminal + Live Browser side-by-side — you're driving</b></sub></td>
+    <td align="center" width="50%"><img src="docs/screenshots/desktop-themes.png" alt="Settings with 15 themes"><br><sub><b>15 themes, font size, cursor &amp; more</b></sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><img src="docs/screenshots/desktop-files.png" alt="File browser panel"><br><sub><b>File browser panel</b></sub></td>
+    <td align="center" width="50%"><img src="docs/screenshots/desktop-pin.png" alt="PIN-gated System Files"><br><sub><b>PIN-gated System Files</b></sub></td>
+  </tr>
+</table>
+
+### Mobile
 
 Phone-first, installed as a PWA — the whole cockpit in your pocket.
 
