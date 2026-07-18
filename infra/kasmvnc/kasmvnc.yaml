@@ -1,0 +1,10 @@
+network:
+  ssl:
+    require_ssl: false
+command_line:
+  prompt: false
+
+desktop:
+  resolution:
+    width: 1280
+    height: 800

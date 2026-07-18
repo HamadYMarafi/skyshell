@@ -1,0 +1,10 @@
+[Unit]
+Description=cloudflared tunnel for cloud Skyshell
+After=network.target
+[Service]
+User=ubuntu
+ExecStart=/usr/bin/cloudflared tunnel --config /home/ubuntu/.cloudflared/config.yml run skyshell
+Restart=always
+RestartSec=5
+[Install]
+WantedBy=multi-user.target

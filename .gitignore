@@ -1,0 +1,28 @@
+# ── secrets / config that must NEVER be committed ──────────────────────────
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.secret
+.term-origin-secret
+.static-proxy
+.cockpit-token
+.oauth-env
+# the REAL cloudflared tunnel config + credentials (only the .example is tracked)
+infra/cloudflared/config.yml
+**/.cloudflared/
+*.tunnel.json
+
+# ── build / deps / caches ──────────────────────────────────────────────────
+node_modules/
+dist/
+__pycache__/
+*.pyc
+
+# ── editor / OS cruft ──────────────────────────────────────────────────────
+.DS_Store
+*.bak*
+*.orig
+.vscode/
+.idea/

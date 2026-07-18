@@ -1,0 +1,48 @@
+[Unit]
+Description=Live browser (maximized, residential UK IP) on :99
+# Wants= (not just After=) so the display is always pulled up with us; if kasmvnc
+# dies at boot, Chrome would otherwise crash-loop forever against a missing :99.
+After=kasmvnc.service residential-proxy.service
+Wants=kasmvnc.service
+[Service]
+User=ubuntu
+Environment=DISPLAY=:99
+Environment=TZ=Europe/London
+Environment=HOME=/home/ubuntu
+# App locale must resolve to en_GB or the renderer processes fall back to en-US
+# (the browser --lang alone doesn't fix the child processes). Needs
+# `locale-gen en_GB.UTF-8` on the box (done 2026-07-12).
+Environment=LANG=en_GB.UTF-8
+Environment=LANGUAGE=en_GB:en
+# GPU flags: this A1.Flex box has NO GPU. --ignore-gpu-blocklist (removed
+# 2026-07-12) made Chromium keep probing a nonexistent Freedreno/Vulkan device
+# until the GPU process crash-looped and took the whole browser down
+# (FATAL "GPU process isn't usable. Goodbye." + SIGTRAP, seen 2026-07-11 08:36).
+# Pin software GL explicitly and make GPU-process deaths non-fatal instead.
+# Launched through the chromium-current symlink (-> chromium-NNNN) so
+# ~/term-ui/chromium-update.sh can swap builds atomically and roll back by
+# repointing; the versioned path used to be hardcoded here.
+ExecStart=/home/ubuntu/.cache/ms-playwright/chromium-current/chrome-linux/chrome --user-data-dir=/home/ubuntu/.livebrowser --no-first-run --no-default-browser-check --proxy-server=http://127.0.0.1:8899 --remote-debugging-port=9222 --window-position=0,0 --window-size=1280,800 --start-maximized --disable-infobars --test-type --disable-session-crashed-bubble --disable-features=TranslateUI --lang=en-GB --use-angle=swiftshader --enable-unsafe-swiftshader --disable-gpu-process-crash-limit https://ipinfo.io/json
+Restart=always
+RestartSec=3
+# Kernel egress kill-switch: confine THIS browser's cgroup to loopback-only egress
+# (its residential proxy on 127.0.0.1:8899) so a dropped --proxy-server flag, profile
+# reset, or Chrome bug can never leak the bare datacenter IP. '+' runs as root; '-'
+# so a firewall hiccup can never block the browser from starting (fails open on the
+# guard, not on the browser). Added/removed with the service lifecycle.
+ExecStartPost=-+/usr/local/sbin/livebrowser-killswitch add
+ExecStopPost=-+/usr/local/sbin/livebrowser-killswitch del
+# Drop the two high-volume benign Chromium log spams (~150k lines/day) that bury
+# real crash lines and inflate journald: no session D-Bus on :99, and GCM push
+# blocked by the proxy. Deny-patterns only — everything else still logs.
+LogFilterPatterns=~Failed to connect to the bus
+LogFilterPatterns=~object_proxy
+LogFilterPatterns=~Failed to connect to MCS endpoint
+# cgroup guard: a runaway page (miner ad, canvas bomb) must never OOM the swapless
+# box or starve KasmVNC/ttyd. MemoryHigh reclaims before the hard MemoryMax kill.
+# NOT sandboxing — these limits don't touch Chrome's own sandbox (see dropins/README).
+MemoryHigh=8G
+MemoryMax=10G
+CPUQuota=300%
+[Install]
+WantedBy=multi-user.target

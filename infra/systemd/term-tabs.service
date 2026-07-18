@@ -1,0 +1,12 @@
+[Unit]
+Description=term-ui tmux tab list service
+After=network.target
+[Service]
+Type=simple
+User=ubuntu
+Environment=TMUX_TMPDIR=/tmp
+ExecStart=/usr/bin/python3 /home/ubuntu/term-ui/tabs_service.py
+Restart=on-failure
+RestartSec=2
+[Install]
+WantedBy=multi-user.target

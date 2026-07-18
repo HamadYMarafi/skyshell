@@ -1,0 +1,25 @@
+[Unit]
+Description=KasmVNC display :99 (web/WS on 127.0.0.1:6081)
+After=network.target
+
+[Service]
+Type=forking
+User=ubuntu
+Environment=HOME=/home/ubuntu
+ExecStartPre=-/usr/bin/vncserver -kill :99
+ExecStart=/usr/bin/vncserver :99 -geometry 1280x800 -websocketPort 6081 -interface 127.0.0.1 -disableBasicAuth -SecurityTypes None -select-de manual
+# Load the custom land/port RandR modes the rotate feature needs (was xvfb.service's
+# job before the Kasm migration). Non-fatal; the script waits for the display.
+ExecStartPost=-/home/ubuntu/term-ui/display-modes.sh
+ExecStop=/usr/bin/vncserver -kill :99
+Restart=on-failure
+RestartSec=3
+# Xvnc's framebuffer/WebP cache grows unbounded (~6.4GB after 5 days observed).
+# Cap it so a leak can't OOM the swapless box; MemoryHigh reclaims before the
+# hard kill, and Restart=on-failure recovers Xvnc alone rather than the kernel
+# OOM-killing an arbitrary box-wide victim. A 1280x800 desktop needs well under 3G.
+MemoryHigh=3G
+MemoryMax=5G
+
+[Install]
+WantedBy=multi-user.target

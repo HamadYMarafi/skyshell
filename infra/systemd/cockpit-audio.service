@@ -1,0 +1,21 @@
+[Unit]
+Description=Cockpit audio - PulseAudio with a virtual sink the live browser plays into (captured for WebRTC)
+After=network.target
+
+[Service]
+User=ubuntu
+Environment=HOME=/home/ubuntu
+RuntimeDirectory=cockpit-pulse
+RuntimeDirectoryMode=0700
+# -n = don't load the default config; we load exactly what we need:
+#   a unix socket (anonymous auth — single-user box), a null sink to play into,
+#   and always-sink so the daemon never falls back to "no sink".
+ExecStart=/usr/bin/pulseaudio -n --exit-idle-time=-1 --disallow-exit --log-target=journal \
+  -L "module-native-protocol-unix auth-anonymous=1 socket=/run/cockpit-pulse/native" \
+  -L "module-null-sink sink_name=cockpit sink_properties=device.description=CockpitSink" \
+  -L "module-always-sink"
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

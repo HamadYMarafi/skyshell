@@ -1,0 +1,11 @@
+[Unit]
+Description=Persistent tmux 'main' session (reboot-proof)
+After=network.target
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=ubuntu
+Environment=TMUX_TMPDIR=/tmp
+ExecStart=/home/ubuntu/term-ui/tmux-main.sh
+[Install]
+WantedBy=multi-user.target

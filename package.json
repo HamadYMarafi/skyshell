@@ -1,0 +1,29 @@
+{
+  "name": "skyshell",
+  "version": "1.0.0",
+  "description": "Skyshell — a self-hosted, phone-first web terminal + a watchable residential-IP live browser your AI can drive, behind one login with zero open ports.",
+  "main": "sw.js",
+  "scripts": {
+    "test": "echo \"Checks live in tools/: verify-themes.js, smoke.js, test_tabs_service.py\" && exit 0"
+  },
+  "keywords": [
+    "web-terminal",
+    "ttyd",
+    "xterm",
+    "tmux",
+    "cloudflare-tunnel",
+    "residential-proxy",
+    "live-browser",
+    "playwright",
+    "mcp",
+    "self-hosted",
+    "pwa"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "private": true,
+  "dependencies": {
+    "playwright-core": "^1.61.1"
+  }
+}

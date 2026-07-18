@@ -1,0 +1,18 @@
+[Unit]
+Description=Claude Code browser MCP - shares the live browser via CDP
+# network-online (not just network.target): npx may hit the registry at boot, and
+# this starts before connectivity is guaranteed otherwise.
+After=network-online.target live-browser.service
+Wants=network-online.target
+[Service]
+User=ubuntu
+Environment=HOME=/home/ubuntu
+Environment=PATH=/usr/bin:/bin:/home/ubuntu/.local/bin
+# Pinned version (was @latest): a breaking upstream release or an npm outage at a
+# restart would otherwise silently swap or break the MCP. 0.0.78 is cached on-box,
+# so this normally resolves offline. Bump deliberately, not implicitly.
+ExecStart=/usr/bin/npx @playwright/mcp@0.0.78 --port 8933 --host 127.0.0.1 --cdp-endpoint http://127.0.0.1:9222
+Restart=always
+RestartSec=3
+[Install]
+WantedBy=multi-user.target

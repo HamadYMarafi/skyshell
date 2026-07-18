@@ -1,0 +1,7 @@
+[Unit]
+Description=Terminal-cloud nightly config+state backup
+
+[Service]
+Type=oneshot
+User=ubuntu
+ExecStart=/home/ubuntu/term-ui/term-backup.sh

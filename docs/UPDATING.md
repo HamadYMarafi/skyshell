@@ -1,0 +1,54 @@
+# DEPLOY — the only ritual
+
+Everything ships from this repo. The `.bak`-file era is over.
+
+## Client / server code (`index.html`, `sw.js`, `manifest.json`, `assets/`, `server/tabs_service.py`, `server/bctl_service.py`)
+
+```bash
+# 1. edit
+# 2. bump the CACHE constant in sw.js if index.html changed (the gate enforces this)
+git add -A && git commit -m "..."
+bash tools/deploy.sh
+```
+
+`tools/deploy.sh` refuses a dirty tree, then runs the full pipeline:
+
+1. **Gate** (`tools/predeploy.sh`): syntax checks, theme-surface + contrast checker,
+   15 unit/HTTP tests for tabs_service (incl. the shipped-bug regressions),
+   sw-cache-bump guard vs the `deployed` tag.
+2. **Ship**: timestamped backup on the box (`/var/backups/term-ui/deploy-<ts>/`),
+   then install; `tabs_service.py`/`bctl_service.py` restart their services only
+   when actually changed vs `deployed`.
+3. **Live smoke** (`tools/smoke.js` through an SSH tunnel to the :7695 agent
+   vhost): WS connects, SW cache coherent, endpoints live, Live Browser panel
+   opens, zero console/CSP/HTTP errors.
+4. **Tag or roll back**: success moves the `deployed` tag; a failed smoke
+   restores the backup and restarts services automatically.
+
+## Infra (nginx, systemd units, monitoring)
+
+Edit under `infra/`, commit, push to the box remote, then run **on the box**
+(needs sudo — the Claude auto-mode classifier blocks agent-side unit installs):
+
+```bash
+ssh -i ~/.ssh/your-server.key ubuntu@YOUR_SERVER_IP \
+  'rm -rf ~/term-ui-repo && git clone -q ~/term-ui.git ~/term-ui-repo && bash ~/term-ui-repo/tools/apply-on-box.sh'
+```
+
+Idempotent; nginx self-restores if its config test fails.
+
+## Origin JWT enforcement
+
+See `docs/ORIGIN-AUTH.md` — staged: preflight the jwt log, then
+`tools/enable-origin-auth.sh` on the box; `tools/disable-origin-auth.sh` reverts.
+
+## Invariants
+
+- `main` on the Mac == `main` on the box bare remote (`git push box main`).
+- Never edit files directly on the box or in `/var/www/term-ui` — they get
+  overwritten by the next deploy.
+- nginx backups go to `/etc/nginx/backups/`, NEVER `sites-enabled/` (a `.bak`
+  there loads as a conflicting server block → 502).
+- Monitoring: `term-health.timer` probes every 5 min and alerts via
+  `~/.term-alert-env` (ntfy topic; optional Discord webhook var); nightly
+  config+state backup at 03:30 UTC, 14 rotations in `/var/backups/term-ui-config/`.

@@ -1,0 +1,10 @@
+[Unit]
+Description=Live browser control (xdotool on :99)
+After=live-browser.service
+[Service]
+User=ubuntu
+Environment=DISPLAY=:99
+ExecStart=/usr/bin/python3 /home/ubuntu/term-ui/bctl_service.py
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target

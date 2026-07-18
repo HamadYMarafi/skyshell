@@ -1,0 +1,18 @@
+[Unit]
+Description=Cockpit bridge - CDP screencast + control for the live browser (127.0.0.1:8934)
+After=network.target live-browser.service
+Wants=live-browser.service
+[Service]
+User=ubuntu
+Environment=HOME=/home/ubuntu
+Environment=DISPLAY=:99
+Environment=XAUTHORITY=/home/ubuntu/.Xauthority
+Environment=COCKPIT_CDP=http://127.0.0.1:9222
+Environment=COCKPIT_PORT=8934
+Environment=COCKPIT_HOST=127.0.0.1
+Environment=COCKPIT_ALLOWED_ORIGINS=https://skyshell.example.com
+ExecStart=/usr/bin/node /home/ubuntu/cockpit/bridge/server.js
+Restart=always
+RestartSec=3
+[Install]
+WantedBy=multi-user.target

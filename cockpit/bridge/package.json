@@ -1,0 +1,9 @@
+{
+  "name": "cockpit-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CDP bridge for the Skyshell live-browser cockpit (screencast + input + inspect over one CDP connection)",
+  "main": "server.js",
+  "type": "commonjs",
+  "dependencies": { "ws": "^8.18.0" }
+}

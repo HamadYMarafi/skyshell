@@ -1,0 +1,7 @@
+[Unit]
+Description=Push alert: %i failed
+
+[Service]
+Type=oneshot
+User=ubuntu
+ExecStart=/home/ubuntu/term-ui/term-alert.sh "term-box unit failed" "%i entered failed state"

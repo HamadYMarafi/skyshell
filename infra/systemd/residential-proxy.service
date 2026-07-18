@@ -1,0 +1,8 @@
+[Unit]
+Description=Residential gateway -> your residential proxy provider static UK IP
+After=network.target
+[Service]
+ExecStart=/usr/bin/tinyproxy -d -c /etc/residential-proxy.conf
+Restart=always
+[Install]
+WantedBy=multi-user.target

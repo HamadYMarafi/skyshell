@@ -1,0 +1,31 @@
+# cloudflared tunnel config — Skyshell
+# ---------------------------------------------------------------------------
+# Copy this to  ~/.cloudflared/config.yml  on your server and fill in your
+# tunnel id. The tunnel is pure transport (no auth) — every hostname below
+# MUST sit behind a Cloudflare Access application, which is the actual login
+# gate. See docs/DEPLOY.md for the one-time tunnel + Access setup.
+#
+# Result: your box dials OUT to Cloudflare. No inbound ports are ever opened,
+# so there is nothing on the public internet to port-scan.
+# ---------------------------------------------------------------------------
+
+tunnel: <YOUR_TUNNEL_ID>
+credentials-file: /home/ubuntu/.cloudflared/<YOUR_TUNNEL_ID>.json
+
+ingress:
+  # The Skyshell app — terminal + the live-browser panel (nginx on :7690).
+  - hostname: skyshell.example.com
+    service: http://localhost:7690
+
+  # OPTIONAL — VS Code in the browser (code-server). Delete if you don't use it.
+  - hostname: code.example.com
+    service: http://localhost:8082
+
+  # OPTIONAL — expose the standalone WebRTC "cockpit" live-browser vhost
+  # (nginx :8080, H.264/Opus, lower latency than the KasmVNC panel) at its own
+  # hostname. Uncomment and give it its own Access app if you want it public.
+  # - hostname: cockpit.example.com
+  #   service: http://localhost:8080
+
+  # Everything else is refused.
+  - service: http_status:404

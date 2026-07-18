@@ -1,0 +1,818 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Live Browser · Cockpit</title>
+<style>
+  :root{
+    --base:#1e1e2e; --mantle:#181825; --crust:#11111b; --surface0:#313244; --surface1:#45475a;
+    --overlay0:#6c7086; --overlay1:#7f849c; --text:#cdd6f4; --subtext0:#a6adc8; --subtext1:#bac2de;
+    --mauve:#cba6f7; --blue:#89b4fa; --sapphire:#74c7ec; --green:#a6e3a1; --red:#f38ba8; --peach:#fab387; --yellow:#f9e2af;
+    --blue-rgb:137,180,250; --green-rgb:166,227,161; --shadow:rgba(0,0,0,.5);
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--crust);color:var(--text);font-family:var(--mono);overflow:hidden}
+  button,input,select{font-family:inherit;color:inherit}
+  .app{display:flex;flex-direction:column;height:100%}
+
+  /* top bar */
+  .bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--mantle);border-bottom:1px solid var(--surface0);flex:0 0 auto}
+  .brand{display:flex;align-items:center;gap:8px;padding-right:8px;flex:0 0 auto}
+  .pulse-dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse-glow 2s ease-out infinite}
+  @keyframes pulse-glow{0%{box-shadow:0 0 0 0 rgba(var(--green-rgb),.55)}70%{box-shadow:0 0 0 6px rgba(var(--green-rgb),0)}100%{box-shadow:0 0 0 0 rgba(var(--green-rgb),0)}}
+  .brand-title{font-size:14px;font-weight:650;color:var(--text);white-space:nowrap}
+  .loc-pill{font-size:11px;font-weight:700;color:var(--sapphire);background:rgba(var(--blue-rgb),.14);padding:3px 9px;border-radius:999px;white-space:nowrap}
+  .nav{display:flex;gap:4px}
+  .ico{width:34px;height:34px;border:0;background:transparent;border-radius:9px;cursor:pointer;display:grid;place-items:center;color:var(--subtext0);font-size:14px;line-height:1;transition:background .12s,color .12s,transform .1s}
+  .ico:hover{background:var(--surface0);color:var(--text)}
+  .ico:active{transform:scale(.9)}
+  .url{flex:1;min-width:80px;height:38px;padding:0 16px;background:var(--base);border:1px solid var(--surface1);border-radius:999px;font-family:var(--mono);font-size:13.5px;letter-spacing:.01em;color:var(--text)}
+  .url::placeholder{color:var(--overlay0)}
+  .url:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(var(--blue-rgb),.16)}
+  .seg{display:flex;align-items:center;background:var(--surface0);border-radius:999px;padding:3px;gap:2px}
+  .seg button{height:30px;padding:0 14px;background:transparent;border:0;border-radius:999px;cursor:pointer;font-size:12px;font-weight:600;color:var(--subtext0);transition:background .12s,color .12s}
+  .seg button.on{background:var(--base);box-shadow:0 1px 5px var(--shadow)}
+  #m-watch.on{color:var(--peach)}
+  #m-take.on{color:var(--green)}
+  select.ctl,button.ctl{height:34px;border:0;background:transparent;border-radius:999px;padding:0 14px;font-size:12px;cursor:pointer;color:var(--subtext0);transition:background .12s,color .12s}
+  button.ctl:hover,select.ctl:hover{background:var(--surface0);color:var(--text)}
+  .stat{display:flex;align-items:center;gap:8px;padding-left:4px;white-space:nowrap}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--overlay0)}
+  .dot.up{background:var(--green);box-shadow:0 0 0 3px rgba(var(--green-rgb),.22)}
+  .dot.down{background:var(--red);box-shadow:0 0 0 3px rgba(243,139,168,.22)}
+  #fps{font-family:var(--mono);font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;background:rgba(var(--green-rgb),.13);color:var(--green)}
+
+  /* tabs row */
+  .tabsrow{display:flex;gap:6px;align-items:center;padding:6px 12px;background:var(--mantle);border-bottom:1px solid var(--surface0);overflow-x:auto;flex:0 0 auto}
+  .tab{display:flex;align-items:center;gap:7px;max-width:220px;height:28px;padding:0 12px;background:var(--surface0);border:0;border-radius:8px;cursor:pointer;font-size:11.5px;color:var(--subtext0);white-space:nowrap;overflow:hidden;transition:background .12s,color .12s}
+  .tab:hover{background:var(--surface1);color:var(--text)}
+  .tab.active{background:rgba(var(--blue-rgb),.16);color:var(--text)}
+  .tab .fav{width:6px;height:6px;border-radius:50%;background:var(--sapphire);flex:0 0 auto}
+  .tab span{overflow:hidden;text-overflow:ellipsis}
+
+  /* main split */
+  .body{flex:1;display:flex;min-height:0}
+  .stage{flex:1;position:relative;display:grid;place-items:center;background:
+     repeating-conic-gradient(var(--mantle) 0% 25%, var(--crust) 0% 50%) 50%/22px 22px;min-width:0}
+  .stage.take{cursor:crosshair}
+  #screen{display:block;image-rendering:auto;box-shadow:0 6px 30px var(--shadow);background:#000}
+  #rtcvideo{display:none;box-shadow:0 6px 30px var(--shadow);background:#000}
+  .stage.rtc #screen{display:none}
+  .stage.rtc #rtcvideo{display:block}
+  #sound{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:none;z-index:6;
+    padding:10px 20px;border-radius:999px;border:1px solid var(--green);background:rgba(30,30,46,.78);
+    color:var(--green);font-family:var(--mono);font-size:12px;letter-spacing:.03em;cursor:pointer;backdrop-filter:blur(8px);transition:background .12s}
+  #sound:hover{background:rgba(30,30,46,.94)}
+  #sound.show{display:block}
+  .overlay{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;color:var(--overlay0);font-family:var(--mono);font-size:13px;gap:8px}
+  .badge{position:absolute;top:10px;left:10px;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;padding:4px 10px;border-radius:999px;border:1px solid var(--surface0);background:rgba(24,24,37,.78);color:var(--subtext0);backdrop-filter:blur(4px)}
+  .badge.take{color:var(--green);border-color:var(--green)}
+
+  /* dock */
+  .dock{width:0;flex:0 0 auto;background:var(--mantle);border-left:1px solid var(--surface0);display:flex;flex-direction:column;transition:width .16s ease;overflow:hidden}
+  .dock.open{width:min(46%,520px)}
+  .dockhead{display:flex;gap:4px;padding:8px;border-bottom:1px solid var(--surface0);flex:0 0 auto}
+  .dockhead button{flex:1;height:30px;border:0;background:var(--surface0);border-radius:999px;font-size:11.5px;font-weight:600;color:var(--subtext0);cursor:pointer;transition:background .12s,color .12s}
+  .dockhead button:hover{background:var(--surface1);color:var(--text)}
+  .dockhead button.on{background:rgba(var(--blue-rgb),.18);color:var(--blue)}
+  .dockbody{flex:1;overflow:auto;font-family:var(--mono);font-size:11.5px;line-height:1.5;background:var(--base)}
+  .pane{display:none;height:100%}
+  .pane.on{display:block}
+  .clog{padding:6px 10px}
+  .clog .row{padding:3px 0;border-bottom:1px solid var(--surface0);white-space:pre-wrap;word-break:break-word;color:var(--subtext0)}
+  .clog .row.error{color:var(--red)} .clog .row.warn{color:var(--yellow)}
+  .clog .lvl{color:var(--overlay0);margin-right:8px}
+  table.net{width:100%;border-collapse:collapse}
+  table.net th{position:sticky;top:0;background:var(--mantle);text-align:left;color:var(--overlay0);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--surface0);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase}
+  table.net td{padding:5px 8px;border-bottom:1px solid var(--surface0);color:var(--subtext0);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  table.net tr.fail td{color:var(--red)}
+  .st-2{color:var(--green)} .st-3{color:var(--sapphire)} .st-4,.st-5{color:var(--red)}
+  .axtools{padding:8px;display:flex;gap:6px;border-bottom:1px solid var(--surface0)}
+  .axtools input{flex:1;height:30px;background:var(--base);border:1px solid var(--surface1);border-radius:999px;padding:0 12px;font-family:var(--mono);font-size:11.5px;color:var(--text)}
+  .axtools input::placeholder{color:var(--overlay0)}
+  .axtools input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(var(--blue-rgb),.16)}
+  .axtools button{height:30px;padding:0 12px;background:var(--surface0);border:0;border-radius:999px;color:var(--subtext0);cursor:pointer;font-size:11.5px;transition:background .12s,color .12s}
+  .axtools button:hover{background:var(--surface1);color:var(--text)}
+  .axlist{padding:4px 0}
+  .axrow{padding:5px 10px;border-bottom:1px solid var(--surface0);cursor:pointer;display:flex;gap:8px;color:var(--subtext0)}
+  .axrow:hover{background:var(--surface0);color:var(--text)}
+  .axrow .role{color:var(--sapphire);flex:0 0 auto}
+  .empty{padding:20px;color:var(--overlay0);text-align:center}
+
+  /* location pill states (driven by /geo — no more hardcoded city) */
+  .loc-pill.warn{color:var(--yellow);background:rgba(249,226,175,.14)}
+  .loc-pill.bad{color:var(--red);background:rgba(243,139,168,.14)}
+
+  /* clipboard popover */
+  .clipwrap{position:relative}
+  .clippop{position:absolute;top:42px;right:0;z-index:40;width:min(420px,86vw);background:var(--mantle);border:1px solid var(--surface1);border-radius:14px;box-shadow:0 10px 36px var(--shadow);padding:10px;display:none;flex-direction:column;gap:8px}
+  .clippop.open{display:flex}
+  .clippop textarea{width:100%;height:110px;resize:vertical;background:var(--base);border:1px solid var(--surface1);border-radius:10px;padding:8px 10px;font-family:var(--mono);font-size:12px;color:var(--text)}
+  .clippop textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(var(--blue-rgb),.16)}
+  .cliprow{display:flex;gap:6px;flex-wrap:wrap}
+  .cliprow button{flex:1;min-width:110px;height:30px;border:0;border-radius:999px;background:var(--surface0);color:var(--subtext0);font-size:11.5px;font-weight:600;cursor:pointer;transition:background .12s,color .12s}
+  .cliprow button:hover{background:var(--surface1);color:var(--text)}
+  .cliphint{font-size:10.5px;color:var(--overlay0);line-height:1.4}
+  .clipsync{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--subtext0);cursor:pointer;user-select:none}
+  .clipsync input{accent-color:var(--green);width:15px;height:15px;cursor:pointer}
+  .clipsync b{font-weight:700;color:var(--green)}
+  .clipsync b.off{color:var(--overlay0)} .clipsync b.warn{color:var(--yellow)}
+
+  /* toast */
+  #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:60;padding:9px 16px;border-radius:999px;background:rgba(24,24,37,.92);border:1px solid var(--surface1);color:var(--text);font-size:12px;opacity:0;pointer-events:none;transition:opacity .18s}
+  #toast.show{opacity:1}
+  ::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:var(--surface0);border-radius:6px}
+  @media (max-width:640px){ .dock.open{width:100%} .hide-sm{display:none} .brand-title,.loc-pill{display:none} .brand{padding-right:2px} }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="bar">
+    <div class="brand">
+      <span class="pulse-dot"></span>
+      <span class="brand-title">Live Browser</span>
+      <span class="loc-pill" id="loc-pill" title="Egress location — live-checked">…</span>
+    </div>
+    <div class="nav">
+      <div class="ico" id="b-back" title="Back">‹</div>
+      <div class="ico" id="b-fwd" title="Forward">›</div>
+      <div class="ico" id="b-reload" title="Reload">⟳</div>
+      <div class="ico" id="b-fit" title="Fit desktop — reset the remote display to 1280×800 (fixes a portrait-stuck screen)">⛶</div>
+    </div>
+    <input class="url" id="url" placeholder="Enter a URL and press Enter" spellcheck="false" autocomplete="off">
+    <div class="seg" title="Watch = read-only · Take over = drive it">
+      <button id="m-watch" class="on">Watch</button>
+      <button id="m-take">Take over</button>
+    </div>
+    <select class="ctl hide-sm" id="viewport" title="Viewport">
+      <option value="fit">Desktop · fit</option>
+      <option value="1280x800">1280 × 800</option>
+      <option value="1024x768">1024 × 768</option>
+      <option value="768x1024">Tablet 768 × 1024</option>
+      <option value="390x844">Phone 390 × 844</option>
+    </select>
+    <button class="ctl hide-sm" id="theme" title="Emulate color scheme">◐ Auto</button>
+    <button class="ctl" id="shot" title="Full-page screenshot">⤓ Shot</button>
+    <div class="clipwrap">
+      <button class="ctl" id="clip-toggle" title="Clipboard: send text to / read text from the remote browser">⧉ Clip</button>
+      <div class="clippop" id="clippop">
+        <label class="clipsync"><input type="checkbox" id="clip-auto" checked>
+          <span>Shared clipboard <b id="clip-state">— on</b></span></label>
+        <div class="cliphint" id="clip-hint">Copy anywhere on this device and paste inside the browser (⌘V / Ctrl+V) — and anything you copy in the browser lands on this device. Syncs while this panel has focus.</div>
+        <textarea id="clip-text" placeholder="Manual fallback: text to send to the remote browser…" spellcheck="false"></textarea>
+        <div class="cliprow">
+          <button id="clip-paste-local" title="Read this device's clipboard into the box above">⇈ From this device</button>
+          <button id="clip-type" title="Type the text into the remote browser at the current focus">⌨ Type into browser</button>
+          <button id="clip-set" title="Load the text into the remote browser's clipboard (then Ctrl+V inside it)">→ Remote clipboard</button>
+          <button id="clip-get" title="Read the remote browser's clipboard into the box above">⇊ From remote</button>
+        </div>
+      </div>
+    </div>
+    <button class="ctl" id="d-toggle" title="Inspector">Inspector</button>
+    <div class="stat"><span class="dot" id="conn"></span><span id="fps">—</span></div>
+  </div>
+
+  <div class="tabsrow" id="tabs"></div>
+
+  <div class="body">
+    <div class="stage" id="stage" tabindex="0">
+      <video id="rtcvideo" playsinline autoplay muted></video>
+      <canvas id="screen" width="1280" height="800"></canvas>
+      <div class="badge" id="badge">watching</div>
+      <button id="sound" title="Enable sound">🔊 Enable sound</button>
+      <div class="overlay" id="overlay"><div>connecting to live browser…</div></div>
+    </div>
+
+    <div class="dock" id="dock">
+      <div class="dockhead">
+        <button data-pane="console" class="on">Console</button>
+        <button data-pane="net">Network</button>
+        <button data-pane="elements">Elements</button>
+      </div>
+      <div class="dockbody">
+        <div class="pane on" id="pane-console"><div class="clog" id="clog"></div></div>
+        <div class="pane" id="pane-net">
+          <table class="net"><thead><tr><th>Method</th><th>Status</th><th>Type</th><th>URL</th><th>Size</th></tr></thead><tbody id="nettb"></tbody></table>
+        </div>
+        <div class="pane" id="pane-elements">
+          <div class="axtools"><input id="axq" placeholder="filter by role or text…"><button id="axload">Load tree</button></div>
+          <div class="axlist" id="axlist"><div class="empty">Load the accessibility tree, then click a node to click it in the page.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const base = location.pathname.replace(/[^/]*$/, '');
+  const wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + base + 'ws';
+  const TOKEN = window.__CKPT_TOKEN || '';
+
+  const cv = $('#screen'), ctx = cv.getContext('2d', { alpha: false });
+  const stage = $('#stage'), badge = $('#badge'), overlay = $('#overlay'), video = $('#rtcvideo');
+  // When embedded in a host app's panel (Skyshell / terminal), that host supplies
+  // its own "Live Browser" header — hide ours to avoid a double header.
+  if (window.self !== window.top) { const _b = document.querySelector('.brand'); if (_b) _b.style.display = 'none'; }
+  let ws, meta = { deviceWidth: 1280, deviceHeight: 800 }, take = false, rtcActive = false;
+  let frames = 0, lastFpsT = performance.now(), pending = null, drawScheduled = false;
+
+  /* ---- websocket ---- */
+  function connect() {
+    ws = TOKEN ? new WebSocket(wsUrl, ['cockpit.' + TOKEN]) : new WebSocket(wsUrl);
+    ws.onopen = () => { $('#conn').className = 'dot up'; overlay.style.display = 'none'; send({ t: 'video', mode: rtcActive ? 'rtc' : 'jpeg' }); };
+    ws.onclose = () => { $('#conn').className = 'dot down'; overlay.style.display = 'grid'; overlay.firstElementChild.textContent = 'reconnecting…'; setTimeout(connect, 1200); };
+    ws.onerror = () => {};
+    ws.onmessage = (e) => onMsg(JSON.parse(e.data));
+  }
+  const send = (o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
+
+  function onMsg(m) {
+    switch (m.t) {
+      case 'hello': if (m.url) $('#url').value = m.url; overlay.style.display = m.cdp ? 'none' : 'grid'; break;
+      case 'frame': meta = m.meta || meta; queueFrame(m.data); break;
+      case 'nav': if (document.activeElement !== $('#url')) $('#url').value = m.url || ''; break;
+      case 'targets': renderTabs(m.list || []); break;
+      case 'console': addConsole(m); break;
+      case 'net': onNet(m); break;
+      case 'netbody': break;
+      case 'ax': renderAx(m.nodes || []); break;
+      case 'shot': saveShot(m.data); break;
+      case 'clip': if (typeof m.remote === 'string') onRemoteClip(m.remote); else onClipReply(m); break;
+      case 'error': addConsole({ level: 'error', text: '[cockpit] ' + m.msg }); break;
+    }
+  }
+
+  /* ---- screencast render (keep only latest frame) ---- */
+  function queueFrame(data) { pending = data; if (!drawScheduled) { drawScheduled = true; requestAnimationFrame(drawFrame); } }
+  function drawFrame() {
+    drawScheduled = false;
+    const data = pending; pending = null; if (!data) return;
+    const img = new Image();
+    img.onload = () => {
+      if (cv.width !== img.width || cv.height !== img.height) { cv.width = img.width; cv.height = img.height; }
+      ctx.drawImage(img, 0, 0);
+      fitCanvas();
+      frames++;
+      const now = performance.now();
+      if (now - lastFpsT > 1000) { $('#fps').textContent = frames + ' fps'; frames = 0; lastFpsT = now; }
+    };
+    img.src = 'data:image/jpeg;base64,' + data;
+  }
+  function fitOne(el, iw, ih, r) {
+    if (!iw || !ih) return;
+    const ar = iw / ih, sar = r.width / r.height;
+    let w, h;
+    if (sar > ar) { h = r.height; w = h * ar; } else { w = r.width; h = w / ar; }
+    el.style.width = Math.round(w) + 'px'; el.style.height = Math.round(h) + 'px';
+  }
+  function fitCanvas() {
+    const r = stage.getBoundingClientRect();
+    fitOne(cv, cv.width, cv.height, r);
+    fitOne(video, video.videoWidth, video.videoHeight, r);
+  }
+  window.addEventListener('resize', fitCanvas);
+
+  /* ---- input forwarding ---- */
+  function norm(e) {
+    const r = (rtcActive ? video : cv).getBoundingClientRect();
+    let nx = (e.clientX - r.left) / r.width, ny = (e.clientY - r.top) / r.height;
+    return { nx: Math.max(0, Math.min(1, nx)), ny: Math.max(0, Math.min(1, ny)) };
+  }
+  const mods = (e) => (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0);
+  let buttons = 0;
+
+  // Mouse-move throttle. 4ms (250Hz) is above any real pointer's event rate, so
+  // in practice every move ships immediately — the throttle is now only a guard
+  // against a pathological event storm, not a latency tax. (It was 10ms, which
+  // put up to 10ms of lag on the pointer during a drag for no benefit: each move
+  // is ~80 bytes and the server injects it in microseconds.)
+  let mvPend = null, mvLast = 0, mvTimer = null;
+  function sendMove(p, m) { send({ t: 'mouse', type: 'move', nx: p.nx, ny: p.ny, buttons, mods: m || 0 }); }
+  function flushPendingMove() {
+    if (mvTimer) { clearTimeout(mvTimer); mvTimer = null; }
+    if (mvPend) { sendMove(mvPend.p, mvPend.m); mvPend = null; mvLast = performance.now(); }
+  }
+  stage.addEventListener('mousemove', e => {
+    if (!take) return;
+    const p = norm(e), m = mods(e), now = performance.now();
+    if (now - mvLast >= 4) { mvLast = now; sendMove(p, m); }
+    else { mvPend = { p, m }; if (!mvTimer) mvTimer = setTimeout(() => { mvTimer = null; flushPendingMove(); }, 4); }
+  });
+  stage.addEventListener('mousedown', e => { if (!take) return; stage.focus(); flushPendingMove(); buttons |= (1 << e.button); const p = norm(e); send({ t: 'mouse', type: 'down', ...p, button: e.button, buttons, clickCount: e.detail || 1, mods: mods(e) }); e.preventDefault(); });
+  window.addEventListener('mouseup', e => { if (!take) return; flushPendingMove(); buttons &= ~(1 << e.button); const p = norm(e); send({ t: 'mouse', type: 'up', ...p, button: e.button, buttons, clickCount: e.detail || 1, mods: mods(e) }); });
+
+  // Wheel: accumulate deltas into whole notches with a CARRY. A soft trackpad
+  // scroll used to become a MINIMUM one-notch event per raw delta (30-60/s) —
+  // simultaneously way too fast and an input-channel flood. ~100px = 1 notch.
+  const NOTCH = 100;
+  let acY = 0, acX = 0, wheelTimer = null, lastWheelP = { nx: .5, ny: .5 }, lastWheelMods = 0;
+  function wheelFlush(force) {
+    if (!take) { acY = 0; acX = 0; return; }        // switched to Watch mid-gesture: never scroll in read-only
+    let wy = Math.trunc(acY / NOTCH), wx = Math.trunc(acX / NOTCH);
+    if (force) {                                    // gesture ended: a real residue earns one notch...
+      if (!wy && Math.abs(acY) >= 34) { wy = Math.sign(acY); acY = wy * NOTCH; }
+      if (!wx && Math.abs(acX) >= 34) { wx = Math.sign(acX); acX = wx * NOTCH; }
+    }
+    // ...and whatever is left MUST survive. Blanket-zeroing the carry here meant
+    // a slow, precise scroll (sub-34px per gesture) was silently discarded every
+    // time — the page simply never moved, no matter how long you scrolled.
+    acY -= wy * NOTCH; acX -= wx * NOTCH;
+    if (wy || wx) send({ t: 'mouse', type: 'wheel', nx: lastWheelP.nx, ny: lastWheelP.ny, wy, wx, mods: lastWheelMods });
+  }
+  stage.addEventListener('wheel', e => {
+    if (!take) return;
+    // deltaMode 1 = LINES: Firefox sends 3 lines per notch, so 100/3 makes a
+    // notch land on exactly 100px (33 would leave it 1px short — every notch
+    // would then wait out the 150ms gesture timer).
+    const scale = e.deltaMode === 1 ? (NOTCH / 3) : (e.deltaMode === 2 ? 800 : 1);
+    acY += e.deltaY * scale; acX += e.deltaX * scale;
+    lastWheelP = norm(e);
+    lastWheelMods = mods(e);                        // ctrl+wheel = zoom, shift+wheel = pan
+    flushPendingMove();
+    wheelFlush(false);
+    clearTimeout(wheelTimer);
+    wheelTimer = setTimeout(() => wheelFlush(true), 150);
+    e.preventDefault();
+  }, { passive: false });
+  stage.addEventListener('contextmenu', e => { if (take) e.preventDefault(); });
+
+  const CTRL = 2, SHIFT = 8;
+  stage.addEventListener('keydown', e => {
+    if (!take) return;
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    const cmd = e.metaKey, ctrl = e.ctrlKey;
+
+    // ---- clipboard keys ----------------------------------------------------
+    // The remote browser is Linux Chrome: its clipboard keys are CTRL-based. A
+    // Mac's ⌘C/⌘X/⌘V would arrive as Super and do nothing at all, so map them.
+    if ((cmd || ctrl) && (k === 'v')) { e.preventDefault(); pasteIntoRemote(); return; }
+    if (cmd && (k === 'c' || k === 'x' || k === 'a')) {
+      e.preventDefault();
+      send({ t: 'key', type: 'down', key: k, mods: CTRL | (e.shiftKey ? SHIFT : 0) });
+      return;                       // the copy lands in the remote clipboard; clipwatch mirrors it back to this device
+    }
+
+    const printable = e.key.length === 1 && !ctrl && !cmd;
+    send({ t: 'key', type: 'down', key: e.key, code: e.code, keyCode: e.keyCode, mods: mods(e), text: printable ? e.key : '' });
+    if (e.key === 'Tab' || e.key === '/' || e.key === "'" || e.key === ' ' || ctrl || cmd) e.preventDefault();
+  });
+  stage.addEventListener('keyup', e => { if (!take) return; send({ t: 'key', type: 'up', key: e.key, code: e.code, keyCode: e.keyCode, mods: mods(e) }); });
+
+  /* ---- ONE SHARED CLIPBOARD ------------------------------------------------
+   * Copy anywhere on this device -> paste inside the remote browser, and copy
+   * inside the remote browser -> paste anywhere on this device. No buttons.
+   *
+   * Reading the system clipboard needs a permission the browser grants per site
+   * (the first attempt raises Chrome's "see text you copy" prompt), and it only
+   * works while THIS page has focus. So: sync on focus, never in the background —
+   * which is also the right privacy answer, since it means nothing is read while
+   * you are off doing something else.
+   * The ⧉ Clip buttons remain the fallback if the permission is refused.       */
+  let clipSync = true, clipReadOk = false, localClip = null, remoteClip = null, pendingWrite = null, pasteArmed = 0;
+
+  async function readLocalClip() {
+    if (!clipSync || !navigator.clipboard || !navigator.clipboard.readText) return null;
+    try { const t = await navigator.clipboard.readText(); clipReadOk = true; return t; }
+    catch { clipReadOk = false; return null; }          // permission refused / not focused
+  }
+  async function syncLocalToRemote() {                   // this device -> remote browser
+    const t = await readLocalClip();
+    if (t == null || t === localClip) return;
+    localClip = t;
+    if (t !== remoteClip) { remoteClip = t; send({ t: 'clip', action: 'push', text: t }); }
+  }
+  async function onRemoteClip(text) {                    // remote browser -> this device
+    if (text === remoteClip && text === localClip) return;
+    remoteClip = text;
+    if (!clipSync || text === localClip) return;
+    if (!navigator.clipboard || !navigator.clipboard.writeText) return;
+    try { await navigator.clipboard.writeText(text); localClip = text; pendingWrite = null; }
+    catch { pendingWrite = text; }                       // not focused yet — write it when we get focus back
+  }
+  async function pasteIntoRemote() {
+    const t = await readLocalClip();
+    if (t != null) {                                     // we can read the clipboard: load it remotely and paste
+      localClip = t; remoteClip = t;
+      send({ t: 'clip', action: 'paste', text: t });
+      return;
+    }
+    // No permission. Let the browser hand us the data via its own paste event
+    // (that needs no permission at all) — and if it never arrives, fall back to
+    // pasting whatever the remote clipboard already holds.
+    pasteArmed = Date.now();
+    setTimeout(() => { if (pasteArmed) { pasteArmed = 0; send({ t: 'key', type: 'down', key: 'v', mods: CTRL }); } }, 250);
+  }
+  window.addEventListener('paste', (e) => {
+    if (!take || !pasteArmed) return;
+    const t = e.clipboardData && e.clipboardData.getData('text/plain');
+    pasteArmed = 0;
+    if (!t) return;
+    e.preventDefault();
+    localClip = t; remoteClip = t;
+    send({ t: 'clip', action: 'paste', text: t });
+  });
+  // Sync whenever we come back into focus, and on a slow tick while focused —
+  // that is when a copy made in another app on this device shows up.
+  const clipTick = () => { if (document.hasFocus() && rendering()) syncLocalToRemote(); };
+  window.addEventListener('focus', () => { clipTick(); if (pendingWrite) onRemoteClip(pendingWrite); });
+  document.addEventListener('visibilitychange', clipTick);
+  setInterval(clipTick, 2000);
+  // The first read is what raises the permission prompt — do it off a real user
+  // gesture so the browser shows it properly rather than silently refusing.
+  stage.addEventListener('mousedown', () => { if (!clipReadOk) syncLocalToRemote(); }, { once: false });
+
+  /* ---- take-over toggle ---- */
+  function setMode(t) {
+    take = t;
+    $('#m-take').classList.toggle('on', t); $('#m-watch').classList.toggle('on', !t);
+    stage.classList.toggle('take', t);
+    badge.textContent = t ? 'you are driving' : 'watching'; badge.classList.toggle('take', t);
+    if (t) stage.focus();
+  }
+  $('#m-take').onclick = () => setMode(true);
+  $('#m-watch').onclick = () => setMode(false);
+
+  /* ---- nav ---- */
+  $('#b-back').onclick = () => send({ t: 'nav', action: 'back' });
+  $('#b-fwd').onclick = () => send({ t: 'nav', action: 'forward' });
+  $('#b-reload').onclick = () => send({ t: 'nav', action: 'reload' });
+  $('#url').addEventListener('keydown', e => { if (e.key === 'Enter') { send({ t: 'nav', action: 'go', url: $('#url').value }); stage.focus(); } });
+
+  /* ---- viewport + theme + shot ---- */
+  $('#viewport').onchange = e => {
+    const v = e.target.value;
+    if (v === 'fit') return send({ t: 'viewport', reset: true });
+    const [w, h] = v.split('x').map(Number);
+    send({ t: 'viewport', w, h, mobile: w < 500, dsf: 0 });
+  };
+  let themeI = 0; const themes = ['no-override', 'light', 'dark']; const themeLbl = ['◐ Auto', '☀ Light', '☾ Dark'];
+  $('#theme').onclick = () => { themeI = (themeI + 1) % 3; $('#theme').textContent = themeLbl[themeI]; send({ t: 'theme', scheme: themes[themeI] }); };
+  $('#shot').onclick = () => send({ t: 'shot' });
+  function saveShot(b64) {
+    const a = document.createElement('a'); a.href = 'data:image/png;base64,' + b64;
+    a.download = 'cockpit-' + Date.now() + '.png'; a.click();
+  }
+
+  /* ---- toast ---- */
+  let toastT = null;
+  function toast(msg) {
+    const el = $('#toast'); el.textContent = msg; el.classList.add('show');
+    clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), 2600);
+  }
+
+  /* ---- fit desktop (reset a portrait-stuck shared display) ---- */
+  $('#b-fit').onclick = () => { send({ t: 'fitDesktop' }); toast('Resetting remote display to 1280×800…'); };
+
+  /* ---- clipboard ---- */
+  const clipPop = $('#clippop'), clipText = $('#clip-text');
+  $('#clip-toggle').onclick = () => { clipPop.classList.toggle('open'); if (clipPop.classList.contains('open')) { syncLocalToRemote().then(clipState); clipState(); } };
+  $('#clip-auto').onchange = (e) => { clipSync = e.target.checked; clipState(); if (clipSync) syncLocalToRemote().then(clipState); };
+  function clipState() {
+    const b = $('#clip-state'); if (!b) return;
+    b.classList.remove('off', 'warn');
+    if (!clipSync) { b.textContent = '— off'; b.classList.add('off'); return; }
+    if (clipReadOk) { b.textContent = '— on'; return; }
+    b.textContent = '— needs clipboard permission';
+    b.classList.add('warn');
+  }
+  clipState();
+  document.addEventListener('mousedown', (e) => {
+    if (clipPop.classList.contains('open') && !e.target.closest('.clipwrap')) clipPop.classList.remove('open');
+  });
+  $('#clip-paste-local').onclick = async () => {
+    try {
+      const v = await navigator.clipboard.readText();
+      if (!v) return toast('Your clipboard is empty');
+      clipText.value = v; toast('Clipboard loaded — now Type or send it');
+    } catch { toast('Clipboard read blocked — paste into the box manually'); clipText.focus(); }
+  };
+  $('#clip-type').onclick = () => {
+    const v = clipText.value; if (!v) return toast('Nothing to type — the box is empty');
+    send({ t: 'clip', action: 'type', text: v }); toast('Typing into the remote browser…');
+  };
+  $('#clip-set').onclick = () => {
+    send({ t: 'clip', action: 'set', text: clipText.value });
+  };
+  $('#clip-get').onclick = () => send({ t: 'clip', action: 'get' });
+  async function onClipReply(m) {
+    if (m.error) return toast(m.error);
+    if (m.done === 'type') return toast('Typed into the remote browser');
+    if (m.done === 'set') return toast('Loaded into the remote clipboard — Ctrl+V inside the browser');
+    if (typeof m.text === 'string') {
+      clipText.value = m.text; clipPop.classList.add('open');
+      try { await navigator.clipboard.writeText(m.text); toast('Remote clipboard copied to this device'); }
+      catch { toast('Pulled from remote — copy it from the box (auto-copy blocked)'); clipText.select(); }
+    }
+  }
+
+  /* ---- honest location pill (GET /geo, 5-min poll) ---- */
+  function refreshGeo() {
+    fetch(base + 'geo', { cache: 'no-store' }).then(r => r.json()).then(g => {
+      const pill = $('#loc-pill'); if (!pill) return;
+      pill.classList.remove('warn', 'bad');
+      if (g.ok === false) { pill.textContent = 'route down'; pill.classList.add('bad'); pill.title = 'Residential route problem — egress check failed'; }
+      else if (g.ok && g.city && g.country === 'GB') { pill.textContent = g.city; pill.title = 'Egress verified ' + (g.checked ? new Date(g.checked * 1000).toLocaleTimeString() : ''); }
+      else if (g.ok && g.city) { pill.textContent = g.city + ' ⚠'; pill.classList.add('bad'); pill.title = 'Unexpected egress country: ' + (g.country || '?'); }
+      else { pill.textContent = 'location n/a'; pill.classList.add('warn'); pill.title = 'Egress location unavailable'; }
+    }).catch(() => {});
+  }
+  refreshGeo(); setInterval(refreshGeo, 300000);
+
+  /* ---- tabs ---- */
+  function renderTabs(list) {
+    const el = $('#tabs'); el.innerHTML = '';
+    if (list.length < 2 && list.every(t => t.active)) { el.style.display = 'none'; return; }
+    el.style.display = 'flex';
+    for (const t of list) {
+      const d = document.createElement('div');
+      d.className = 'tab' + (t.active ? ' active' : '');
+      d.innerHTML = '<i class="fav"></i><span></span>';
+      d.querySelector('span').textContent = t.title || t.url || 'tab';
+      d.title = t.url;
+      if (!t.active) d.onclick = () => send({ t: 'switchTarget', id: t.id });
+      el.appendChild(d);
+    }
+  }
+
+  /* ---- console ---- */
+  const clog = $('#clog'); let clogN = 0;
+  function addConsole(m) {
+    const row = document.createElement('div');
+    row.className = 'row ' + (m.level === 'error' ? 'error' : m.level === 'warning' || m.level === 'warn' ? 'warn' : '');
+    row.innerHTML = '<span class="lvl"></span>';
+    row.querySelector('.lvl').textContent = (m.level || 'log').slice(0, 4);
+    row.appendChild(document.createTextNode(m.text || ''));
+    clog.appendChild(row);
+    if (++clogN > 500) clog.removeChild(clog.firstChild);
+    const b = clog.parentElement; b.scrollTop = b.scrollHeight;
+  }
+
+  /* ---- network ---- */
+  const netrows = new Map(); const nettb = $('#nettb');
+  function onNet(m) {
+    if (m.phase === 'req') {
+      const tr = document.createElement('tr'); tr.dataset.id = m.id;
+      tr.innerHTML = `<td>${m.method || ''}</td><td class="st">·</td><td>${(m.rtype||'').toLowerCase()}</td><td title="${esc(m.url)}">${esc(shortUrl(m.url))}</td><td>—</td>`;
+      nettb.appendChild(tr); netrows.set(m.id, tr);
+      if (nettb.children.length > 300) { const f = nettb.firstChild; netrows.delete(f.dataset.id); nettb.removeChild(f); }
+    } else {
+      const tr = netrows.get(m.id); if (!tr) return;
+      if (m.phase === 'res') { const c = tr.children[1]; c.textContent = m.status; c.className = 'st st-' + String(m.status)[0]; }
+      if (m.phase === 'done') tr.children[4].textContent = fmtSize(m.size);
+      if (m.phase === 'fail') { tr.classList.add('fail'); tr.children[1].textContent = 'fail'; tr.children[4].textContent = (m.error||'').slice(0,18); }
+    }
+  }
+  const esc = s => (s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const shortUrl = u => { try { const x = new URL(u); return x.pathname === '/' ? x.host : x.host + x.pathname; } catch { return u || ''; } };
+  const fmtSize = n => !n ? '—' : n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' K' : (n / 1048576).toFixed(1) + ' M';
+
+  /* ---- elements / a11y ---- */
+  let axNodes = [];
+  $('#axload').onclick = () => { $('#axlist').innerHTML = '<div class="empty">loading…</div>'; send({ t: 'ax' }); };
+  $('#axq').addEventListener('input', () => paintAx());
+  function renderAx(nodes) { axNodes = nodes.filter(n => n.role && n.role.value && !['none','generic','InlineTextBox','StaticText'].includes(n.role.value)); paintAx(); }
+  function paintAx() {
+    const q = $('#axq').value.toLowerCase(); const list = $('#axlist'); list.innerHTML = '';
+    const rows = axNodes.filter(n => {
+      const role = n.role?.value || '', name = n.name?.value || '';
+      return !q || role.toLowerCase().includes(q) || name.toLowerCase().includes(q);
+    }).slice(0, 300);
+    if (!rows.length) { list.innerHTML = '<div class="empty">no matching nodes</div>'; return; }
+    for (const n of rows) {
+      const d = document.createElement('div'); d.className = 'axrow';
+      d.innerHTML = '<span class="role"></span><span class="nm"></span>';
+      d.querySelector('.role').textContent = n.role.value;
+      d.querySelector('.nm').textContent = (n.name?.value || '').slice(0, 80);
+      if (n.backendDOMNodeId) d.onclick = () => { send({ t: 'clickNode', backendNodeId: n.backendDOMNodeId }); setMode(true); };
+      list.appendChild(d);
+    }
+  }
+
+  /* ---- dock ---- */
+  $('#d-toggle').onclick = () => $('#dock').classList.toggle('open');
+  document.querySelectorAll('.dockhead button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('.dockhead button').forEach(x => x.classList.remove('on'));
+    document.querySelectorAll('.pane').forEach(p => p.classList.remove('on'));
+    b.classList.add('on'); $('#pane-' + b.dataset.pane).classList.add('on');
+    if (!$('#dock').classList.contains('open')) $('#dock').classList.add('open');
+  });
+
+  /* ---- WebRTC video (primary once connected; screenshot canvas stays as fallback) ---- */
+  const rtcUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + base + 'webrtc';
+  const soundBtn = $('#sound');
+  let pc = null, rtcWs = null, rtcRetryN = 0, rtcTimer = null, discSince = 0;
+  let lastFrameSeen = 0, frameWatch = null, firstFrameTimer = null, frameGen = 0;
+  let rtcSuspended = false, notRenderingSince = 0;
+
+  /* ---- "is this panel actually being rendered?" ----------------------------
+   * THE trap in this whole design: requestVideoFrameCallback (and rAF) only fire
+   * as part of the rendering steps. A hidden tab, or an iframe the parent app has
+   * hidden (closing the Live Browser panel does NOT unmount us), renders nothing
+   * — so frame callbacks stop even though the media is perfectly healthy. A naive
+   * freeze watchdog reads that as "video died", tears down a good session, then
+   * fails to see frames on the rebuild (still hidden), tears down again... an
+   * endless loop that spawns a fresh H.264 encoder on the box every few seconds,
+   * forever, for every open tab. rAF liveness is the honest signal: if WE are not
+   * being rendered, we are not entitled to an opinion about the video.          */
+  let lastRaf = 0;
+  (function rafTick() { lastRaf = performance.now(); requestAnimationFrame(rafTick); })();
+  const rendering = () => document.visibilityState === 'visible' && performance.now() - lastRaf < 1500;
+
+  function dropToJpeg() {
+    if (rtcActive) { rtcActive = false; stage.classList.remove('rtc'); }
+    clearTimeout(firstFrameTimer);
+    send({ t: 'video', mode: 'jpeg' });    // bridge resumes the JPEG fallback for us
+  }
+
+  // "Are frames actually painting?" — requestVideoFrameCallback is the only
+  // honest answer for a MediaStream (a frozen track fires no events at all).
+  // Each call supersedes the previous chain: a flappy link reconnecting all day
+  // would otherwise leave dozens of self-renewing callbacks firing 30x/s.
+  function trackFrames() {
+    const gen = ++frameGen;
+    if (video.cancelVideoFrameCallback && frameWatch) { try { video.cancelVideoFrameCallback(frameWatch); } catch {} }
+    frameWatch = null;
+    if (!video.requestVideoFrameCallback) { lastFrameSeen = performance.now(); return; }   // Firefox: currentTime fallback below
+    const tick = () => {
+      if (gen !== frameGen) return;        // superseded
+      lastFrameSeen = performance.now();
+      frameWatch = video.requestVideoFrameCallback(tick);
+    };
+    frameWatch = video.requestVideoFrameCallback(tick);
+  }
+  let lastCt = -1, lastCtAt = 0;           // currentTime progress: the freeze signal where rVFC is missing
+  function framesFlowing() {
+    if (video.requestVideoFrameCallback) return lastFrameSeen > 0;
+    return video.videoWidth > 0 && video.readyState >= 2;
+  }
+  function goLiveOnRtc() {
+    if (rtcActive) return;
+    rtcActive = true;
+    stage.classList.add('rtc');
+    overlay.style.display = 'none';
+    if (video.muted) soundBtn.classList.add('show');
+    send({ t: 'video', mode: 'rtc' });     // only NOW is the JPEG fallback redundant
+    setTimeout(fitCanvas, 40);
+  }
+  function awaitFirstFrame() {
+    lastFrameSeen = 0;
+    trackFrames();
+    clearTimeout(firstFrameTimer);
+    let budget = 8000;                     // only counts down while we are actually rendering
+    let last = performance.now();
+    (function poll() {
+      if (!pc || pc.connectionState !== 'connected') return;      // gone; other handlers own it
+      const now = performance.now();
+      if (rendering()) budget -= (now - last);
+      last = now;
+      if (framesFlowing()) return goLiveOnRtc();
+      if (budget <= 0) {                                           // connected but silent — rebuild, stay on JPEG
+        addConsole({ level: 'warn', text: '[cockpit] WebRTC connected but no video frames — falling back and retrying' });
+        dropToJpeg(); rtcSchedule(); return;
+      }
+      firstFrameTimer = setTimeout(poll, 200);
+    })();
+  }
+
+  /* Supervisor (2s): freeze detection + idle suspend. Both are gated on actually
+   * being rendered — see the rAF note above. */
+  setInterval(() => {
+    if (!rendering()) {
+      // Hidden / panel closed. Don't judge the video, and don't hold a server
+      // slot + a 5 Mbps H.264 encoder open for a panel nobody is looking at
+      // (the media server only allows 2 concurrent viewers).
+      if (!notRenderingSince) notRenderingSince = performance.now();
+      if (!rtcSuspended && performance.now() - notRenderingSince > 20000) {
+        rtcSuspended = true;
+        clearTimeout(rtcTimer); clearTimeout(firstFrameTimer);
+        frameGen++;                        // stop the rVFC chain
+        try { if (pc) pc.close(); } catch {}
+        if (rtcWs) { try { rtcWs.onclose = rtcWs.onerror = rtcWs.onmessage = null; rtcWs.close(); } catch {} rtcWs = null; }
+        pc = null;
+        if (rtcActive) { rtcActive = false; stage.classList.remove('rtc'); }
+        send({ t: 'video', mode: 'idle' });   // not rendering: don't want the video OR the JPEG fallback
+      }
+      return;
+    }
+    // Rendering again.
+    notRenderingSince = 0;
+    if (rtcSuspended) { rtcSuspended = false; send({ t: 'video', mode: 'jpeg' }); rtcConnect(); return; }
+    if (!rtcActive) return;
+
+    let frozen = false;
+    if (video.requestVideoFrameCallback) {
+      frozen = lastFrameSeen > 0 && performance.now() - lastFrameSeen > 4000;
+    } else {                               // no rVFC (Firefox): a frozen MediaStream stops advancing currentTime
+      const ct = video.currentTime;
+      if (ct !== lastCt) { lastCt = ct; lastCtAt = performance.now(); }
+      frozen = lastCtAt > 0 && performance.now() - lastCtAt > 4000;
+    }
+    if (frozen) {
+      addConsole({ level: 'warn', text: '[cockpit] video froze — switching to fallback and reconnecting' });
+      dropToJpeg(); rtcSchedule();
+    }
+  }, 2000);
+
+  function rtcConnect() {
+    clearTimeout(rtcTimer);
+    try { if (pc) pc.close(); } catch {}
+    // Close the previous signaling socket BEFORE opening a new one — each old
+    // socket held a live server session whose encoder kept running until the
+    // server's ping timeout reaped it. Detach its handlers so its onclose
+    // can't double-schedule a retry.
+    if (rtcWs) {
+      try { rtcWs.onclose = rtcWs.onerror = rtcWs.onmessage = null; rtcWs.close(); } catch {}
+      rtcWs = null;
+    }
+    pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }], bundlePolicy: 'max-bundle' });
+    const mstream = new MediaStream();
+    pc.ontrack = (e) => {
+      mstream.addTrack(e.track);
+      if (video.srcObject !== mstream) video.srcObject = mstream;
+      // Chrome buffers ~100ms+ of VIDEO by default to smooth network jitter. This
+      // is a REMOTE CONTROL surface, not a movie: ask for the minimum playout
+      // delay so the picture tracks the pointer instead of trailing it.
+      // AUDIO must keep its buffer — Opus with a zero jitter buffer crackles and
+      // drops out on any wifi jitter (ontrack fires for both tracks).
+      if (e.track && e.track.kind === 'video') {
+        try { if (e.receiver && 'jitterBufferTarget' in e.receiver) e.receiver.jitterBufferTarget = 0; } catch {}
+        try { if (e.receiver && 'playoutDelayHint' in e.receiver) e.receiver.playoutDelayHint = 0; } catch {}
+      }
+    };
+    pc.onicecandidate = (e) => { if (e.candidate) rtcSend({ type: 'ice', sdpMLineIndex: e.candidate.sdpMLineIndex, candidate: e.candidate.candidate }); };
+    pc.onconnectionstatechange = () => {
+      const s = pc.connectionState;
+      if (s === 'connected') {
+        // 'connected' = ICE+DTLS are up — NOT that a single frame has painted.
+        // Switching the view (and killing the JPEG fallback) here would show a
+        // black stage for the ~0.5s until the first keyframe decodes, and a
+        // permanently black one if media never actually flows. Wait for a real
+        // frame; keep the fallback visible until then.
+        rtcRetryN = 0;
+        video.play().catch(() => {});
+        awaitFirstFrame();
+      } else if (s === 'failed' || s === 'closed') {
+        dropToJpeg();
+        rtcSchedule();
+      } else if (s === 'disconnected') {
+        // 'disconnected' is usually a transient (wifi blip, NAT rebind) that ICE
+        // self-heals. The old 4s bail-out tore down a WORKING session on every
+        // hiccup — the "video restarts every ~10s" flap. Keep showing the last
+        // frames and give it a real 10s to recover before rebuilding.
+        discSince = performance.now();
+        setTimeout(() => {
+          if (pc && pc.connectionState === 'disconnected' && performance.now() - discSince >= 9500) { dropToJpeg(); rtcSchedule(); }
+        }, 10000);
+      }
+    };
+    try { rtcWs = TOKEN ? new WebSocket(rtcUrl, ['cockpit.' + TOKEN]) : new WebSocket(rtcUrl); }
+    catch (e) { rtcSchedule(); return; }
+    rtcWs.onopen = () => rtcSend({ type: 'start' });
+    rtcWs.onmessage = async (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch { return; }
+      // The media server refuses a 3rd viewer ({type:'error'}) — surface it
+      // instead of silently retrying forever behind a JPEG-only panel.
+      if (m.type === 'error') {
+        addConsole({ level: 'warn', text: '[cockpit] media server: ' + (m.msg || 'error') + ' — staying on the fallback view' });
+        rtcRetryN = 6;                     // long backoff; a slot frees when the other viewer idles out
+        return;
+      }
+      try {
+        if (m.type === 'offer') {
+          await pc.setRemoteDescription({ type: 'offer', sdp: m.sdp });
+          const ans = await pc.createAnswer();
+          await pc.setLocalDescription(ans);
+          rtcSend({ type: 'answer', sdp: ans.sdp });
+        } else if (m.type === 'ice' && m.candidate) {
+          await pc.addIceCandidate({ candidate: m.candidate, sdpMLineIndex: m.sdpMLineIndex });
+        }
+      } catch (err) { /* ignore late/duplicate ICE */ }
+    };
+    rtcWs.onclose = () => { dropToJpeg(); rtcSchedule(); };
+    rtcWs.onerror = () => {};
+  }
+  function rtcSend(o) { if (rtcWs && rtcWs.readyState === 1) rtcWs.send(JSON.stringify(o)); }
+  function rtcSchedule() {
+    clearTimeout(rtcTimer);
+    if (rtcSuspended) return;              // panel closed/hidden — do not rebuild into a void
+    rtcRetryN = Math.min(rtcRetryN + 1, 6);
+    rtcTimer = setTimeout(() => { if (!rtcSuspended) rtcConnect(); }, 1000 * rtcRetryN);
+  }
+
+  video.addEventListener('loadedmetadata', () => setTimeout(fitCanvas, 20));
+  soundBtn.addEventListener('mousedown', e => e.stopPropagation());
+  soundBtn.onclick = () => { video.muted = false; video.play().catch(() => {}); soundBtn.classList.remove('show'); stage.focus(); };
+
+  setMode(true);   // default to Take over — it's a browser you use; Watch is opt-in
+  connect();
+  rtcConnect();
+  setTimeout(fitCanvas, 60);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+[Unit]
+Description=Terminal-cloud stack health probe
+
+[Service]
+Type=oneshot
+User=ubuntu
+RuntimeDirectory=term-health
+RuntimeDirectoryPreserve=yes
+ExecStart=/home/ubuntu/term-ui/term-health.sh

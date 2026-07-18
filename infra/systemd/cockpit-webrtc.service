@@ -1,0 +1,43 @@
+[Unit]
+Description=Cockpit WebRTC media server - streams :99 display + audio over WebRTC (H.264/Opus)
+After=network.target live-browser.service cockpit-audio.service
+Wants=live-browser.service cockpit-audio.service
+[Service]
+User=ubuntu
+Environment=HOME=/home/ubuntu
+Environment=DISPLAY=:99
+Environment=XAUTHORITY=/home/ubuntu/.Xauthority
+Environment=PULSE_SERVER=unix:/run/cockpit-pulse/native
+Environment=COCKPIT_WEBRTC_HOST=127.0.0.1
+Environment=COCKPIT_WEBRTC_PORT=8935
+# 5000 (was 8000): x264 has no receiver-feedback adaptation here, so the rate
+# must leave headroom on the viewer's downlink — 8Mbps + the (now suppressed)
+# JPEG fallback stream congested weaker links until the media path flapped
+# 'disconnected' every ~10s. 5Mbps stays sharp for 1280x800 UI content.
+Environment=COCKPIT_WEBRTC_BITRATE=5000
+Environment=COCKPIT_WEBRTC_FPS=60
+Environment=COCKPIT_WEBRTC_PRESET=ultrafast
+Environment=COCKPIT_WEBRTC_W=1280
+Environment=COCKPIT_WEBRTC_H=800
+Environment=COCKPIT_ALLOWED_ORIGINS=https://skyshell.example.com
+# Cap concurrent viewers: bounds the encoder stack AND the ICE port range
+# (40000-40009). ICE is concentrated on the routable interface by srflx-only
+# candidate filtering in the server, not by a per-interface bind pin.
+Environment=COCKPIT_MAX_SESSIONS=2
+# Pin the desktop to a clean 1280x800 so the encoder captures it 1:1 (no rescale
+# blur / aspect squeeze); then best-effort re-fit the Chrome window to fill it.
+# Leading '-' => a failure here never blocks the encoder from starting.
+ExecStartPre=-/usr/bin/xrandr --display :99 -s 1280x800
+ExecStart=/usr/bin/python3 /home/ubuntu/cockpit/webrtc/webrtc_server.py
+ExecStartPost=-/bin/sh -c 'sleep 3; xdotool search --class chromium windowsize 1280 800 windowmove 0 0'
+Restart=always
+RestartSec=3
+# A runaway encoder stack must never starve KasmVNC/ttyd/nginx on a 4-core box.
+# 250% (was 150%): 60fps capture+encode needs roughly double the CPU of 30fps,
+# and hitting the quota would silently drop frames — the exact stutter this
+# change exists to remove. Still leaves 1.5 of the 4 cores for everything else.
+CPUQuota=250%
+MemoryHigh=768M
+MemoryMax=1G
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=Skyshell live-browser activity flag (auto-pop)
+# Display :99 is owned by kasmvnc (vncserver), NOT the old xvfb.service. This unit
+# used to declare Wants=xvfb.service, which on a cold boot would resurrect the
+# disabled Xvfb and race vncserver for :99 (same bug class as the ttyd boot race).
+# xvfb.service is masked on the box; this points at the real display owner.
+After=kasmvnc.service
+Wants=kasmvnc.service
+[Service]
+User=ubuntu
+ExecStart=/usr/local/bin/skyshell-live-active.sh
+Restart=always
+RestartSec=3
+[Install]
+WantedBy=multi-user.target
