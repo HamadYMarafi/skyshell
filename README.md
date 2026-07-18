@@ -38,6 +38,25 @@ This repo is a **skeleton**: the real, working code, fully sanitized, plus the c
 
 ---
 
+## 📱 Screenshots
+
+Phone-first, installed as a PWA — the whole cockpit in your pocket.
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/mobile-sidebar.jpeg" width="230" alt="Sessions and panels"><br><sub><b>Sessions &amp; panels</b></sub></td>
+    <td align="center"><img src="docs/screenshots/mobile-terminal.jpeg" width="230" alt="Terminal with mobile key-bar"><br><sub><b>Terminal + mobile key-bar</b></sub></td>
+    <td align="center"><img src="docs/screenshots/mobile-keyboard.jpeg" width="230" alt="On-screen keyboard and history nav"><br><sub><b>Keyboard &amp; history nav</b></sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/mobile-pin.jpeg" width="230" alt="PIN-gated System Files"><br><sub><b>PIN-gated System Files</b></sub></td>
+    <td align="center"><img src="docs/screenshots/mobile-files.jpeg" width="230" alt="File browser"><br><sub><b>File browser</b></sub></td>
+    <td align="center"><img src="docs/screenshots/mobile-live-browser.jpeg" width="230" alt="Live Browser you are driving"><br><sub><b>Live Browser — you're driving</b></sub></td>
+  </tr>
+</table>
+
+---
+
 ## The three pillars
 
 ### 🖥️ 1 — A terminal that follows you
