@@ -19,7 +19,7 @@ Environment=COCKPIT_WEBRTC_FPS=60
 Environment=COCKPIT_WEBRTC_PRESET=ultrafast
 Environment=COCKPIT_WEBRTC_W=1280
 Environment=COCKPIT_WEBRTC_H=800
-Environment=COCKPIT_ALLOWED_ORIGINS=https://skyshell.example.com
+Environment=COCKPIT_ALLOWED_ORIGINS=https://app.example.com,https://skyshell.example.com
 # Cap concurrent viewers: bounds the encoder stack AND the ICE port range
 # (40000-40009). ICE is concentrated on the routable interface by srflx-only
 # candidate filtering in the server, not by a per-interface bind pin.

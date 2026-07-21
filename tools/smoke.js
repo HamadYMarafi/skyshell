@@ -17,8 +17,11 @@
  *     end-to-end with a stubbed clipboard read (_cbTest taps both lanes
  *     BEFORE the terminal hand-off — nothing reaches the live tmux or the
  *     machine clipboard; term.paste itself is asserted present, not driven)
- *  5. Live Browser panel opens and its iframe points at /browser/
- *  6. zero console errors, zero pageerrors, zero CSP violations,
+ *  5. terminal file-links: a real box file linkifies through live
+ *     /tabs/stat validation, /tabs/dl streams it as an attachment, and
+ *     out-of-base paths are refused (containment)
+ *  6. Live Browser panel opens and its iframe points at /browser/
+ *  7. zero console errors, zero pageerrors, zero CSP violations,
  *     zero HTTP >= 400 responses
  */
 const { chromium } = require('playwright-core');
@@ -157,7 +160,48 @@ const BASE = process.env.BASE || 'http://127.0.0.1:8443';
     if (!(await page.evaluate(() => window._cbTest.pasteApi()))) fail.push('term.paste API missing');
   } catch (e) { fail.push('ctxmenu/clipboard: ' + String(e).slice(0, 160)); }
 
-  // 4. Live Browser panel
+  // 3.8 terminal file-links (v21): a real box file must linkify through the
+  // live /tabs/stat validation and download via /tabs/dl (attachment), and
+  // containment must refuse out-of-base paths. Out-of-base probes use
+  // page.request so their 4xx never trips the page response listener; the
+  // in-page scan only stats the existing probe (all 200s).
+  let lnName = null;
+  try {
+    await page.request.post(BASE + '/tabs/lib/delete?name=link-probe.md').catch(() => {});  // stale probe would collision-rename
+    const up = await (await page.request.post(BASE + '/tabs/lib/upload?name=link-probe.md',
+      { headers: { 'Content-Type': 'application/octet-stream' }, data: 'link-probe-✓' })).json();
+    if (!up.ok) throw new Error('upload: ' + JSON.stringify(up));
+    lnName = up.name;
+    if (up.name !== 'link-probe.md') throw new Error('probe name collided: ' + up.name);
+    const probe = '/home/ubuntu/files/link-probe.md';
+    const links = await page.evaluate((p) => new Promise((res) => {
+      window._lnTest.scan('saved ' + p + ' and (see https://example.com/doc) end', (l) => res(l));
+      setTimeout(() => res(null), 5000);
+    }), probe);
+    const kinds = (links || []).map(l => l.kind + ':' + l.text).join(' | ');
+    if (!links || !links.some(l => l.kind === 'path' && l.text === probe))
+      fail.push('file-link: path not linkified (' + kinds + ')');
+    if (!links || !links.some(l => l.kind === 'url' && l.text === 'https://example.com/doc'))
+      fail.push('file-link: url not linkified (' + kinds + ')');
+    const dl = await page.request.get(BASE + '/tabs/dl?path=' + encodeURIComponent(probe));
+    const disp = dl.headers()['content-disposition'] || '';
+    if (dl.status() !== 200 || (await dl.text()) !== 'link-probe-✓' || disp.indexOf('attachment') < 0)
+      fail.push('file-link: download broken (status ' + dl.status() + ' disp "' + disp + '")');
+    if ((await page.request.get(BASE + '/tabs/dl?path=/etc/passwd')).status() !== 403)
+      fail.push('file-link: /etc/passwd download not refused');
+    // stat is always 200 (hover-probe — a 4xx would trip the in-page response
+    // gate); containment is asserted on the body, and on /tabs/dl's 403 above.
+    const shadow = await (await page.request.get(BASE + '/tabs/stat?path=/etc/shadow')).json().catch(() => ({ ok: true }));
+    if (shadow.ok !== false) fail.push('file-link: stat containment hole (out-of-base returned ok)');
+  } catch (e) { fail.push('file-link: ' + String(e).slice(0, 160)); }
+  finally {
+    if (lnName) {
+      const del = await (await page.request.post(BASE + '/tabs/lib/delete?name=' + encodeURIComponent(lnName))).json().catch(() => ({}));
+      if (!del.ok) fail.push('file-link cleanup failed — orphan on box: ' + lnName);
+    }
+  }
+
+  // 6. Live Browser panel
   try {
     await page.click('#btn-live-browser', { timeout: 5000 });
     await page.waitForTimeout(5000);
@@ -168,12 +212,12 @@ const BASE = process.env.BASE || 'http://127.0.0.1:8443';
     if (!src || src.indexOf('/live2/') < 0) fail.push('Live Browser iframe missing/wrong: ' + src);
   } catch (e) { fail.push('Live Browser panel failed to open'); }
 
-  // 5. cleanliness
+  // 7. cleanliness
   const cspv = await page.evaluate(() => window.__cspv);
   cspv.forEach(v => fail.push('CSP violation: ' + v));
   consoleErrs.forEach(c => fail.push('console: ' + c));
 
   await browser.close();
   if (fail.length) { console.error('SMOKE FAIL\n - ' + fail.join('\n - ')); process.exit(1); }
-  console.log('SMOKE PASS  (ws + sw:' + expected + ' + tabs:' + tabs.length + ' + folder-endpoints + ctxmenu/clipboard + browser-panel + 0 errors)');
+  console.log('SMOKE PASS  (ws + sw:' + expected + ' + tabs:' + tabs.length + ' + folder-endpoints + ctxmenu/clipboard + file-links + browser-panel + 0 errors)');
 })().catch(e => { console.error('SMOKE FATAL ' + String(e).slice(0, 300)); process.exit(1); });

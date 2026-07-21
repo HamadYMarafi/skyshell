@@ -4,7 +4,9 @@ After=network.target
 [Service]
 User=ubuntu
 Environment=HOME=/home/ubuntu
-EnvironmentFile=/home/ubuntu/.claude/.oauth-env
+# '-' prefix: the file is optional — without it systemd refuses to start the
+# terminal at all on a box that has never minted a Claude token (2026-07-21).
+EnvironmentFile=-/home/ubuntu/.claude/.oauth-env
 KillMode=process
 ExecStart=/usr/bin/ttyd -p 7681 -i 127.0.0.1 -W -t fontSize=13 -t lineHeight=1.15 -t letterSpacing=0 -t 'fontFamily=JetBrainsMono Nerd Font, SF Mono, Menlo, Consolas, monospace' -t cursorBlink=true -t cursorStyle=bar -t cursorInactiveStyle=outline -t scrollback=10000 -t macOptionIsMeta=true -t rightClickSelectsWord=true -t disableLeaveAlert=true -t disableResizeOverlay=true -t 'theme={"background":"#1e1e2e","foreground":"#cdd6f4","cursor":"#f5e0dc","cursorAccent":"#1e1e2e","selectionBackground":"#585b70","black":"#45475a","red":"#f38ba8","green":"#a6e3a1","yellow":"#f9e2af","blue":"#89b4fa","magenta":"#f5c2e7","cyan":"#94e2d5","white":"#bac2de","brightBlack":"#585b70","brightRed":"#f38ba8","brightGreen":"#a6e3a1","brightYellow":"#f9e2af","brightBlue":"#89b4fa","brightMagenta":"#f5c2e7","brightCyan":"#94e2d5","brightWhite":"#a6adc8"}' tmux new-session -A -s main
 Restart=always

@@ -19,8 +19,16 @@
     "self-hosted",
     "pwa"
   ],
-  "author": "",
+  "author": "Skyshell contributors",
   "license": "MIT",
+  "homepage": "https://github.com/HamadYMarafi/skyshell#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HamadYMarafi/skyshell.git"
+  },
+  "bugs": {
+    "url": "https://github.com/HamadYMarafi/skyshell/issues"
+  },
   "type": "commonjs",
   "private": true,
   "dependencies": {

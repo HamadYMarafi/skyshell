@@ -19,7 +19,7 @@
  *   - cross-origin               -> untouched
  * ======================================================================== */
 
-var CACHE = "term-shell-v20";   // v20: clipboard — right-click context menu (replaces native+tmux overlap), OSC 52 tmux-copy → system clipboard, ⌥-drag selection, bracketed-paste-safe Paste
+var CACHE = "term-shell-v21";   // v21: file links — paths in terminal output validate against the box and click-download via /tabs/dl; http(s) URLs open in a new tab
 
 /* App shell + same-origin static assets to precache. Missing files are tolerated
    (Promise.allSettled) so a not-yet-deployed asset never blocks activation. */

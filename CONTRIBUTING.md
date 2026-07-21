@@ -17,6 +17,10 @@ your own machine. PRs, issues, and forks are all welcome.
 4. **Prefer small, measured changes.** Much of this project is latency- and
    layout-sensitive; when you touch the live browser or the mobile keyboard,
    measure before/after rather than guessing.
+5. **CI runs on every PR** (`.github/workflows/ci.yml`): the Python service
+   tests, JS and shell syntax checks, and an `nginx -t` load of the configs
+   under the documented install layout. Run the fast ones locally first —
+   `python3 tools/test_tabs_service.py`, `node --check`, `bash -n`.
 
 ## Secret check before every push
 
@@ -25,7 +29,7 @@ your own machine. PRs, issues, and forks are all welcome.
 grep -rInE '([0-9]{1,3}\.){3}[0-9]{1,3}|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|BEGIN [A-Z ]*PRIVATE KEY' \
   --include='*.md' --include='*.sh' --include='*.py' --include='*.js' \
   --include='*.conf' --include='*.yml' --include='*.service' . \
-  | grep -vE '127\.0\.0\.1|0\.0\.0\.0|example\.com|@example'
+  | grep -vE '127\.0\.0\.1|0\.0\.0\.0|10\.0\.0\.|example\.com|@example'
 ```
 
 ## Local dev

@@ -31,7 +31,7 @@ ssh -i ~/.ssh/your-server.key \
 attached to the browser's CDP endpoint:
 
 ```
-npx @playwright/mcp --port 8933 --host 127.0.0.1 --cdp-endpoint http://127.0.0.1:9222
+npx @playwright/mcp@0.0.78 --port 8933 --host 127.0.0.1 --cdp-endpoint http://127.0.0.1:9222
 ```
 
 So it drives the **existing** residential browser rather than launching a fresh

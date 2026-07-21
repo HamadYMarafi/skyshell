@@ -77,7 +77,7 @@ Phone-first, installed as a PWA — the whole cockpit in your pocket.
 ### 🖥️ 1 — A terminal that follows you
 `nginx → ttyd → tmux → your shell`
 
-A custom **xterm.js** front-end (one self-contained `index.html`, no build step) speaking ttyd's WebSocket protocol, attached to a persistent **tmux** session. On top of the bare terminal it adds **tabs** (mapped to tmux windows), a **command palette**, **search**, **15 themes**, a **mobile key-bar** (arrows, Esc, Ctrl, Tab, pipe…), **haptics**, a **PIN-gated file browser**, and **PWA install**. Your work survives disconnects *and* reboots.
+A custom **xterm.js** front-end (one self-contained `index.html`, no build step) speaking ttyd's WebSocket protocol, attached to a persistent **tmux** session. On top of the bare terminal it adds **tabs** (mapped to tmux windows), a **command palette**, **search**, **15 themes**, a **mobile key-bar** (arrows, Esc, Ctrl, Tab, pipe…), **haptics**, a **PIN-gated file browser**, **drag-and-drop upload** (drop files or whole folders onto the terminal), a **right-click clipboard menu** (with OSC 52, so tmux/vim yanks land in your device clipboard), **click-to-download file links** (file paths printed in terminal output become links, each validated live against the server before download), and **PWA install**. Your work survives disconnects *and* reboots.
 
 ### 🌐 2 — A watchable browser on a residential IP
 `headless Chromium on :99  →  local proxy  →  your residential exit IP`
@@ -115,7 +115,7 @@ The **same** browser you're watching is exposed over Chrome DevTools Protocol an
    │     ├─ /browser/*     → KasmVNC :6081  (watch the live browser) │
    │     └─ /live2/*       → WebRTC cockpit :8934/:8935 (H.264)      │
    │                                                                │
-   │   display :99 (Xvfb) ── window mgr ── live Chromium            │
+   │   display :99 (Xvnc) ── window mgr ── live Chromium            │
    │        │                               │ --proxy → :8899        │
    │        │                               └ CDP :9222 ◄────┐       │
    │   local proxy :8899 (tinyproxy) ──► your residential exit IP    │
@@ -139,7 +139,7 @@ Skyshell is **built to run on a server** (that's the point — it's always on an
 You'll need: a Linux box (an ARM VM from any cloud works great), a domain on Cloudflare, and — for the live browser — a residential proxy subscription. Then:
 
 ```bash
-git clone https://github.com/<you>/skyshell.git
+git clone https://github.com/HamadYMarafi/skyshell.git
 cd skyshell
 cp .env.example .env          # fill in your host, tunnel, proxy…
 cp infra/cloudflared/config.example.yml infra/cloudflared/config.yml
@@ -182,20 +182,10 @@ Every hostname, port, proxy, and secret is a placeholder. One page maps exactly 
 
 **Front-end:** vanilla JS + [xterm.js](https://xtermjs.org/), a service-worker PWA, no framework, no build step.
 **Terminal:** [ttyd](https://github.com/tsl0922/ttyd) + [tmux](https://github.com/tmux/tmux).
-**Live browser:** [Chromium](https://www.chromium.org/) on [Xvfb](https://www.x.org/) + a window manager, watched via [KasmVNC](https://github.com/kasmtech/KasmVNC) and a custom WebRTC pipeline (x264/Opus), driven via CDP + [Playwright MCP](https://github.com/microsoft/playwright-mcp).
+**Live browser:** [Chromium](https://www.chromium.org/) on a virtual X display (KasmVNC's Xvnc) + a window manager, watched via [KasmVNC](https://github.com/kasmtech/KasmVNC) and a custom WebRTC pipeline (x264/Opus), driven via CDP + [Playwright MCP](https://github.com/microsoft/playwright-mcp).
 **Residential egress:** [tinyproxy](https://tinyproxy.github.io/) → a residential proxy of your choice.
 **Edge / auth:** [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) + [Access](https://developers.cloudflare.com/cloudflare-one/policies/access/), plus an origin-side JWT verifier.
 **Glue:** [nginx](https://nginx.org/), Python stdlib HTTP services, systemd, a git-gated deploy pipeline with auto-rollback.
-
----
-
-## Screenshots
-
-> _Add yours here_ — e.g. `docs/img/terminal.png`, `docs/img/live-browser.png`, `docs/img/mobile.png`, then reference them below.
-
-| Terminal (desktop) | Live browser panel | On a phone (PWA) |
-|:---:|:---:|:---:|
-| _screenshot_ | _screenshot_ | _screenshot_ |
 
 ---
 
@@ -210,5 +200,7 @@ Much of the engineering story is a *measure-don't-guess* one — the live-browse
 ## License & credits
 
 MIT — see [LICENSE](LICENSE). Skyshell stands on the shoulders of the open-source
-projects in the tech-stack list above; each keeps its own license. Built with a
+projects in the tech-stack list above; each keeps its own license — the bundled
+ones (xterm.js, the Nerd-Font-patched JetBrains Mono, `ws`) are reproduced in
+[THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md). Built with a
 lot of help from an AI pair-programmer, which is only fitting given pillar #3.

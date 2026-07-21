@@ -14,7 +14,7 @@ echo "== ship scripts + units =="
 scp -q -i "$KEY" -o BatchMode=yes server/term-alert.sh server/term-health.sh server/term-backup.sh $BOX:term-ui/
 scp -q -i "$KEY" -o BatchMode=yes infra/systemd/term-alert@.service infra/systemd/term-health.service \
     infra/systemd/term-health.timer infra/systemd/term-backup.service infra/systemd/term-backup.timer $BOX:/tmp/
-scp -q -i "$KEY" -o BatchMode=yes infra/nginx/term-ui.conf infra/nginx/term-ui-headers.conf $BOX:/tmp/
+scp -q -i "$KEY" -o BatchMode=yes infra/nginx/term-ui.conf infra/nginx/term-ui-headers.conf infra/nginx/term-jwt-map.conf $BOX:/tmp/
 
 $SSH "set -e
 chmod +x ~/term-ui/term-alert.sh ~/term-ui/term-health.sh ~/term-ui/term-backup.sh
@@ -56,8 +56,12 @@ RestrictSUIDSGID=yes'
 
 echo '== nginx (backup -> install -> test -> reload) =='
 sudo -n mkdir -p /etc/nginx/backups /etc/nginx/snippets
-sudo -n cp -a /etc/nginx/sites-enabled/term-ui /etc/nginx/backups/term-ui.bak-$TS
+sudo -n cp -a /etc/nginx/sites-enabled/term-ui /etc/nginx/backups/term-ui.bak-$TS 2>/dev/null || true
 sudo -n install -m 644 /tmp/term-ui-headers.conf /etc/nginx/snippets/
+# the auth include must exist (empty until origin-auth is enabled) or nginx -t fails
+[ -f /etc/nginx/snippets/term-ui-auth.conf ] || sudo -n touch /etc/nginx/snippets/term-ui-auth.conf
+# jwtprobe log_format + $connection_upgrade map — term-ui.conf needs both
+sudo -n install -m 644 /tmp/term-jwt-map.conf /etc/nginx/conf.d/term-jwt-map.conf
 sudo -n install -m 644 /tmp/term-ui.conf /etc/nginx/sites-enabled/term-ui
 sudo -n nginx -t
 sudo -n systemctl daemon-reload

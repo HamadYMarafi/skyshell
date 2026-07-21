@@ -1,0 +1,97 @@
+# CI for the pieces that break silently: the tabs service (the one component
+# with a real test suite), plain syntax across every shipped script, and the
+# nginx configs actually loading under the documented install layout.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # No pip installs on purpose: tabs_service.py and its test are
+      # stdlib-only. PyJWT belongs to origin_auth.py, which the syntax job
+      # only byte-compiles (py_compile never imports).
+      #
+      # The suite sandboxes itself — it sets TERM_TABS_{FILES_BASE,LIB_BASE,
+      # PIN_FILE} into a temp dir and binds an ephemeral port before importing
+      # the service, so it needs no env vars, no tmux (the /tabs endpoint
+      # degrades to its tested 503 path) and never touches real paths.
+      - name: tabs_service test suite
+        run: python3 tools/test_tabs_service.py
+
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: node --check (service worker + tools)
+        run: |
+          for f in sw.js tools/*.js; do node --check "$f"; done
+      - name: bash -n (server + tools scripts)
+        run: |
+          for f in tools/*.sh server/*.sh; do bash -n "$f"; done
+      - name: py_compile (server + cockpit)
+        run: python3 -m py_compile server/*.py cockpit/bridge/*.py cockpit/webrtc/*.py
+
+  nginx-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Mirror the layout the docs and apply scripts install:
+      #   term-ui.conf         -> /etc/nginx/sites-enabled/term-ui  (tools/apply-infra.sh)
+      #   term-jwt-map.conf    -> /etc/nginx/conf.d/                (map + jwtprobe log_format)
+      #   cockpit.conf         -> /etc/nginx/conf.d/                (tools/apply-cockpit.sh)
+      #   term-ui-headers.conf -> /etc/nginx/snippets/
+      #   term-ui-auth.conf    -> /etc/nginx/snippets/  EMPTY = shipped default
+      #                           (origin auth off; tools/enable-origin-auth.sh flips it)
+      # conf.d loads before sites-enabled, exactly like the Ubuntu nginx.conf,
+      # so the jwtprobe log_format exists before term-ui.conf references it.
+      - name: Assemble the documented install layout
+        run: |
+          d="$RUNNER_TEMP/nginx-ci"
+          mkdir -p "$d/conf.d" "$d/sites-enabled" "$d/snippets"
+          cp infra/nginx/term-jwt-map.conf infra/nginx/cockpit.conf "$d/conf.d/"
+          cp infra/nginx/term-ui.conf "$d/sites-enabled/term-ui"
+          cp infra/nginx/term-ui-headers.conf "$d/snippets/term-ui-headers.conf"
+          : > "$d/snippets/term-ui-auth.conf"
+          cat > "$d/nginx.conf" <<'EOF'
+          events { }
+          http {
+              include /etc/nginx/mime.types;
+              default_type application/octet-stream;
+              include /etc/nginx/conf.d/*.conf;
+              include /etc/nginx/sites-enabled/*;
+          }
+          EOF
+      # --entrypoint skips the image's template/ipv6 entrypoint scripts (the
+      # mounts are read-only). /var/log/nginx exists in the image, so the
+      # access_log ... jwtprobe target opens cleanly under -t.
+      - name: nginx -t
+        run: |
+          docker run --rm --entrypoint nginx \
+            -v "$RUNNER_TEMP/nginx-ci/nginx.conf:/etc/nginx/nginx.conf:ro" \
+            -v "$RUNNER_TEMP/nginx-ci/conf.d:/etc/nginx/conf.d:ro" \
+            -v "$RUNNER_TEMP/nginx-ci/sites-enabled:/etc/nginx/sites-enabled:ro" \
+            -v "$RUNNER_TEMP/nginx-ci/snippets:/etc/nginx/snippets:ro" \
+            nginx:1.27-alpine -t

@@ -17,6 +17,9 @@ echo "== [1/5] ship cockpit bundle -> ~/cockpit =="
 rsync -az --delete -e "ssh -i $KEY -o BatchMode=yes" cockpit/ "$BOX:/home/ubuntu/cockpit/"
 scp -q -i "$KEY" -o BatchMode=yes infra/systemd/cockpit-bridge.service "$BOX:/tmp/cockpit-bridge.service"
 scp -q -i "$KEY" -o BatchMode=yes infra/nginx/cockpit.conf "$BOX:/tmp/cockpit.conf"
+# term-jwt-map.conf carries the $connection_upgrade map cockpit.conf relies on
+# since 2026-07-21 — the two must always ship together or nginx -t fails.
+scp -q -i "$KEY" -o BatchMode=yes infra/nginx/term-jwt-map.conf "$BOX:/tmp/term-jwt-map.conf"
 
 echo "== [2/5] install + (re)start cockpit-bridge.service =="
 $SSH "node --check /home/ubuntu/cockpit/bridge/server.js && echo 'server.js syntax OK'"   # validate BEFORE (re)start
@@ -46,13 +49,16 @@ $SSH "sudo -n systemctl daemon-reload"
 
 echo "== [4/5] nginx: backup -> install /live2/ -> test -> reload (self-restoring) =="
 $SSH "sudo -n cp -a /etc/nginx/conf.d/cockpit.conf /etc/nginx/backups/cockpit.conf.bak-$TS"
+$SSH "sudo -n cp -a /etc/nginx/conf.d/term-jwt-map.conf /etc/nginx/backups/term-jwt-map.conf.bak-$TS 2>/dev/null || true"
 $SSH "sudo -n install -m644 /tmp/cockpit.conf /etc/nginx/conf.d/cockpit.conf"
+$SSH "sudo -n install -m644 /tmp/term-jwt-map.conf /etc/nginx/conf.d/term-jwt-map.conf"
 if $SSH "sudo -n nginx -t"; then
   $SSH "sudo -n systemctl reload nginx"
   echo "   nginx reloaded"
 else
-  echo "   nginx -t FAILED — restoring previous cockpit.conf"
+  echo "   nginx -t FAILED — restoring previous cockpit.conf + term-jwt-map.conf"
   $SSH "sudo -n cp -a /etc/nginx/backups/cockpit.conf.bak-$TS /etc/nginx/conf.d/cockpit.conf"
+  $SSH "sudo -n cp -a /etc/nginx/backups/term-jwt-map.conf.bak-$TS /etc/nginx/conf.d/term-jwt-map.conf 2>/dev/null || true"
   exit 1
 fi
 
@@ -60,5 +66,5 @@ echo "== [5/5] verify /live2/ through nginx (:8080) =="
 echo "   /live2/healthz : $($SSH 'curl -s --max-time 5 127.0.0.1:8080/live2/healthz')"
 echo "   /live2/ index  : $($SSH 'curl -s -o /dev/null -w "%{http_code}" --max-time 5 127.0.0.1:8080/live2/')"
 echo "   existing /live/: $($SSH 'curl -s -o /dev/null -w "%{http_code}" --max-time 5 127.0.0.1:8080/live/vnc.html') (KasmVNC fallback still up)"
-echo "DONE $TS — cockpit v2 live at https://skyshell.example.com/live2/ (behind your CF Access)"
+echo "DONE $TS — cockpit v2 live at https://app.example.com/live2/ (behind your CF Access)"
 echo "Rollback: sudo systemctl disable --now cockpit-bridge ; sudo cp /etc/nginx/backups/cockpit.conf.bak-$TS /etc/nginx/conf.d/cockpit.conf ; sudo systemctl reload nginx"

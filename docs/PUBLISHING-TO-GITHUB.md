@@ -8,7 +8,7 @@ my profile I can link on LinkedIn." Two paths — pick one.
 > ```bash
 > cd skyshell
 > grep -rIn -E '([0-9]{1,3}\.){3}[0-9]{1,3}|@gmail\.com|BEGIN [A-Z ]*PRIVATE KEY' \
->   --exclude-dir=assets --exclude-dir=.git . | grep -vE '127\.0\.0\.1|0\.0\.0\.0|example\.com'
+>   --exclude-dir=assets --exclude-dir=.git . | grep -vE '127\.0\.0\.1|0\.0\.0\.0|10\.0\.0\.|example\.com'
 > ```
 > If that prints nothing but localhost/example lines, you're clean. `.gitignore`
 > already blocks `.env`, keys, and the real tunnel config.
@@ -77,9 +77,10 @@ That's it — `gh` prints the URL.
 1. **About box** (top-right of the repo page → the ⚙️): add a one-line
    description and **topics** — e.g. `self-hosted`, `web-terminal`, `xterm`,
    `cloudflare-tunnel`, `residential-proxy`, `playwright`, `mcp`, `pwa`.
-2. **Screenshots**: drop a few PNGs into `docs/img/`, commit, and update the
-   Screenshots table in `README.md` to point at them. (Easiest: edit the README
-   on github.com and drag images straight into the editor.)
+2. **Screenshots**: the README galleries already render from
+   `docs/screenshots/`. To use your own captures, replace those files (keep the
+   filenames) or drop new images into `docs/screenshots/` and update the paths
+   in `README.md`.
 3. **Pin it** to your profile: your profile page → **Customize your pins** →
    tick `skyshell`.
 4. **License**: the `LICENSE` file says *"Skyshell contributors"* — you may want

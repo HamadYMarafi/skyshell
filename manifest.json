@@ -1,7 +1,7 @@
 {
-  "name": "Skyshell",
-  "short_name": "Skyshell",
-  "description": "Your always-on cloud machine — a shell, your AI, and a watchable residential-IP browser, from any device.",
+  "name": "Terminal",
+  "short_name": "Terminal",
+  "description": "Cockpit for an always-on cloud machine — drop into Claude Code + a shell from anywhere.",
   "id": "/",
   "start_url": ".",
   "scope": ".",

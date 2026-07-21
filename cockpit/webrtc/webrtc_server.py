@@ -150,7 +150,7 @@ class Session:
                     log('ice port-range set failed:', e)
                 # ICE is concentrated on the one internet-routable interface at the
                 # CANDIDATE layer, not the binding layer: _on_ice advertises ONLY the
-                # srflx (public) candidate, and only the box's routable interface can reach STUN to form
+                # srflx (public) candidate, and only 10.0.0.102 can reach STUN to form
                 # one — so Tailscale / VPN-bridge / link-local paths are never offered to
                 # the peer. libnice still binds range ports on other interfaces while
                 # gathering, but releases the non-nominated ones once a pair is chosen.

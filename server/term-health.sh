@@ -38,7 +38,10 @@ STATS=$(curl -s --max-time 8 -H "X-Term-Secret: $SEC" http://127.0.0.1:7690/stat
 # Oracle (proxy_ok only proves reachability, not identity). Only fire on a DEFINITIVE
 # non-GB answer — a failed geo lookup stays silent (reachability is covered above).
 GEO=$(curl -m 8 -sx http://127.0.0.1:8899 https://ipinfo.io/country 2>/dev/null | tr -d '[:space:]')
-if [ -n "$GEO" ]; then { [ "$GEO" = "GB" ] && ok "egress country GB"; } || add "egress country drifted to $GEO (expected GB — your residential proxy provider fallback/leak?)"; fi
+# Expected egress country is configurable (set EGRESS_EXPECT in ~/.term-alert-env
+# or the unit env) — hardcoding GB gave every non-UK proxy user false alerts.
+EXPECT="${EGRESS_EXPECT:-GB}"
+if [ -n "$GEO" ]; then { [ "$GEO" = "$EXPECT" ] && ok "egress country $EXPECT"; } || add "egress country drifted to $GEO (expected $EXPECT — proxy fallback/leak?)"; fi
 
 # Resource guards
 DISK=$(df / | awk 'NR==2{print $5}' | tr -d '%')

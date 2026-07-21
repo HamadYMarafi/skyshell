@@ -35,5 +35,7 @@ internet. Treat it accordingly.
 ## Reporting
 
 This is a personal/skeleton project with no security SLA. If you find a real
-issue in the code, open an issue (for non-sensitive bugs) or contact the
-maintainer privately (for anything exploitable).
+issue in the code, open an issue (for non-sensitive bugs). For anything
+exploitable, use GitHub's private vulnerability reporting:
+<https://github.com/HamadYMarafi/skyshell/security/advisories/new> — it reaches
+the maintainer without disclosing the issue publicly.

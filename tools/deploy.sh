@@ -43,7 +43,12 @@ ssh -i "$KEY" -o BatchMode=yes -o ExitOnForwardFailure=yes -f -N -L $TUN_PORT:12
 trap "pkill -f '$TUN_PORT:127.0.0.1:7695' 2>/dev/null || true" EXIT
 sleep 1
 if BASE=http://127.0.0.1:$TUN_PORT node tools/smoke.js; then
-  git tag -f deployed >/dev/null && git push -q -f box deployed 2>/dev/null || true
+  git tag -f deployed >/dev/null
+  # Push BOTH the branch and the tag — a tag-only push leaves the bare repo's main
+  # behind, so a plain `git clone` from the box restores stale code (found 2026-07-21).
+  if ! git push -q -f box main deployed; then
+    echo "WARN: git push to box failed — bare repo on box is now behind (fix: git push box main deployed)"
+  fi
   echo "DEPLOY OK  ($TS · $(git rev-parse --short HEAD))"
 else
   echo "SMOKE FAILED — ROLLING BACK"

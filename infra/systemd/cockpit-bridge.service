@@ -10,7 +10,7 @@ Environment=XAUTHORITY=/home/ubuntu/.Xauthority
 Environment=COCKPIT_CDP=http://127.0.0.1:9222
 Environment=COCKPIT_PORT=8934
 Environment=COCKPIT_HOST=127.0.0.1
-Environment=COCKPIT_ALLOWED_ORIGINS=https://skyshell.example.com
+Environment=COCKPIT_ALLOWED_ORIGINS=https://app.example.com,https://skyshell.example.com
 ExecStart=/usr/bin/node /home/ubuntu/cockpit/bridge/server.js
 Restart=always
 RestartSec=3

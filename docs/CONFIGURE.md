@@ -15,9 +15,9 @@ grep -rIn -E 'example\.com|YOUR_SERVER_IP|your-server\.key|YOUR_TUNNEL_ID|YOUR_C
 
 | Placeholder | Means | Set it in | Env var |
 |---|---|---|---|
-| `skyshell.example.com` | your app's public hostname | `infra/cloudflared/config.example.yml`, `infra/systemd/cockpit-bridge.service`, `infra/systemd/cockpit-webrtc.service`, `server/term-health.sh`, `tools/apply-cockpit.sh`, `tools/enable-origin-auth.sh` | `APP_HOST` |
+| `skyshell.example.com` | your app's public hostname | `infra/cloudflared/config.example.yml`, `infra/systemd/cockpit-bridge.service`, `infra/systemd/cockpit-webrtc.service`, `server/term-health.sh`, `tools/enable-origin-auth.sh` | `APP_HOST` |
 | `code.example.com` | (optional) code-server hostname | `infra/cloudflared/config.example.yml` | `CODE_HOST` |
-| `app.example.com` | (optional) extra apps behind the same tunnel | `infra/cloudflared/config.example.yml` (commented) | — |
+| `app.example.com` | (optional) the standalone cockpit vhost's own hostname | `infra/systemd/cockpit-bridge.service` + `cockpit-webrtc.service` (`COCKPIT_ALLOWED_ORIGINS`), `tools/apply-cockpit.sh`; its tunnel ingress is the commented `cockpit.example.com` block in `infra/cloudflared/config.example.yml` | — |
 | `your-team.cloudflareaccess.com` | your Cloudflare Access team domain | `server/origin_auth.py` (default) | `ACCESS_TEAM_DOMAIN` |
 | `<YOUR_TUNNEL_ID>` | your cloudflared tunnel id | `infra/cloudflared/config.example.yml` | `CF_TUNNEL_ID` |
 | `YOUR_SERVER_IP` | your box's address | `tools/deploy.sh`, `tools/apply-infra.sh`, `tools/apply-on-box.sh`, `tools/apply-cockpit.sh` | `DEPLOY_HOST` |
@@ -32,6 +32,7 @@ update them consistently:
 
 | Path | What it is |
 |---|---|
+| `~/skyshell` | your clone of this repo on the box (the path these docs assume). One exception: `tools/enable-origin-auth.sh` hardcodes the clone as `R=~/term-ui-repo` — point its `R=` variable at your clone rather than renaming it |
 | `/home/ubuntu` | the service user's home (in most `*.service` files) |
 | `/var/www/term-ui` | where the front-end (`index.html`, `assets/`) is served from (nginx `root`) |
 | `~/term-ui` | where the Python services (`tabs_service.py`, `bctl_service.py`) live |
@@ -45,6 +46,31 @@ Set `User=` / `HOME=` in the `.service` files to your service user.
 All the localhost ports are listed with defaults in
 [`.env.example`](../.env.example). Change one only if it clashes on your box —
 and then change it in the matching `.service`/nginx file too.
+
+## Service knobs (optional)
+
+Defaults are right for most boxes — set these only when yours differs:
+
+- **`TERM_TABS_TMUX_SOCK`** — tmux socket path for `server/tabs_service.py`.
+  The default derives from the running uid (`/tmp/tmux-<uid>/default`), which
+  matches what `tmux-main.sh` creates — most users never set it. Override via
+  `Environment=` in `term-tabs.service` if you run tmux on a custom socket.
+- **`EGRESS_EXPECT`** — the country `term-health.sh` expects the live browser's
+  egress IP to resolve to (default `GB`). If your residential proxy exits
+  elsewhere, set it or every health run alerts a "drift":
+  `sudo systemctl edit term-health` → `[Service]` + `Environment=EGRESS_EXPECT=US`
+  (or export it when running `term-health.sh --report` by hand).
+- **rclone remote `r2`** — `term-backup.sh` pushes nightly snapshots to an
+  rclone remote named `r2` (`r2:backups/term-box`). Run `rclone config` once to
+  create it; any S3-compatible bucket works (Cloudflare R2, S3, B2, …).
+  Skipping `rclone config` just means no offsite push — the local rotations in
+  `/var/backups` are written either way.
+- **`AGE_RECIPIENT`** (in `server/term-backup.sh`) — the bucket only ever
+  receives **age-encrypted** blobs; while this is still the placeholder the
+  push is skipped entirely, never sent plaintext. Generate a keypair with
+  `age-keygen` on your **own machine**, paste the `public key:` line into
+  `AGE_RECIPIENT`, and keep the private key off the server — it is the only
+  thing that decrypts your backups.
 
 ---
 

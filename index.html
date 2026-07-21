@@ -2232,7 +2232,7 @@
 
     <div class="sidebar-foot">
       <div class="user-chip">
-        <span class="avatar" id="avatar">h</span>
+        <span class="avatar" id="avatar">y</span>
         <span class="user-meta">
           <span class="user-name" id="user-name">you</span>
           <!-- Identity strip: ⏻ London · connected · up 4 days (driven by GET /stats). -->
@@ -5717,6 +5717,168 @@
       for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
       term.write("\x1b]52;c;" + btoa(bin) + "\x07");
     }
+  };
+
+  /* ---------------------------------------------------------------------- *
+   * 13b. Clickable file links in terminal output.                          *
+   *   Path-shaped tokens (/home/ubuntu/…, ~/…, /tmp/…) printed by anything *
+   *   in the terminal are validated against the box on hover (/tabs/stat — *
+   *   only real files underline) and a click downloads via /tabs/dl        *
+   *   (attachment). http(s) URLs open in a new tab. Wrapped rows join with *
+   *   the same index/cols math the web-links addon uses. Paths with spaces *
+   *   can't be tokenized out of flowing text — known limitation.           *
+   * ---------------------------------------------------------------------- */
+  var LN_RE = /https?:\/\/[A-Za-z0-9._~:\/?#\[\]@!$&'()*+,;=%-]+|(?:~|\/home\/ubuntu|\/tmp)(?:\/[A-Za-z0-9._%+@=-]+)+/g;
+  function lnCleanUrl(u) {
+    // Loop the two passes to a fixpoint: "…/y;)" needs the ) stripped (pass 2)
+    // to expose the ; for pass 1. Unbalanced )/] only — a legit "…/Foo_(bar)"
+    // wiki path keeps its balanced paren.
+    var prev;
+    do {
+      prev = u;
+      u = u.replace(/[.,;:!?'"]+$/, "");
+      if (u.slice(-1) === ")" && u.split("(").length < u.split(")").length) u = u.slice(0, -1);
+      if (u.slice(-1) === "]" && u.split("[").length < u.split("]").length) u = u.slice(0, -1);
+    } while (u !== prev);
+    return u;
+  }
+  function lnCandidates(text) {
+    var out = [], m;
+    if (!text || text.length > 8192) return out;
+    LN_RE.lastIndex = 0;
+    while ((m = LN_RE.exec(text))) {
+      if (/^https?:/i.test(m[0])) {
+        var u = lnCleanUrl(m[0]);
+        if (u.length > 10) out.push({ idx: m.index, raw: u, kind: "url" });
+      } else {
+        out.push({ idx: m.index, raw: m[0], kind: "path" });
+      }
+    }
+    return out;
+  }
+  var lnCache = {};                       // path -> {file:bool, exp:ms} (60s hit / 15s miss)
+  var lnPending = {};                     // path -> [cb...] in-flight, so one wrapped line's
+                                          // repeated per-row asks share a single /tabs/stat
+  function lnStat(p, cb) {
+    var c = lnCache[p];
+    if (c && c.exp > Date.now()) { cb(c.file); return; }
+    if (lnPending[p]) { lnPending[p].push(cb); return; }
+    lnPending[p] = [cb];
+    function settle(isFile) {
+      var cbs = lnPending[p]; delete lnPending[p];
+      if (cbs) cbs.forEach(function (f) { f(isFile); });
+    }
+    fetch("/tabs/stat?path=" + encodeURIComponent(p))
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        var isFile = !!(j && j.ok && j.file);
+        if (Object.keys(lnCache).length > 500) lnCache = {};   // per-session growth guard
+        lnCache[p] = { file: isFile, exp: Date.now() + (isFile ? 60000 : 15000) };
+        settle(isFile);
+      }, function () { settle(false); });   // network blip: no link now, no cache poison
+  }
+  // A path match may carry sentence punctuation ("…/x.md."): the stripped form
+  // is likelier to be the real file, so it stats first.
+  function lnResolvePath(raw, cb) {
+    var tries = [];
+    var stripped = raw.replace(/\.+$/, "");
+    if (stripped && stripped !== raw) tries.push(stripped);
+    tries.push(raw);
+    (function next(i) {
+      if (i >= tries.length) { cb(null); return; }
+      lnStat(tries[i], function (ok) { if (ok) cb(tries[i]); else next(i + 1); });
+    })(0);
+  }
+  function lnDownload(p) {
+    delete lnCache[p];                    // click re-validates — the 60s hit TTL must not mask a deletion
+    lnStat(p, function (ok) {
+      if (!ok) { toast("File not found on the box", "warn", 1800); return; }
+      var a = document.createElement("a");
+      a.href = "/tabs/dl?path=" + encodeURIComponent(p);
+      a.download = "";
+      document.body.appendChild(a); a.click(); a.remove();
+      toast("Downloading " + (p.split("/").pop() || p), "ok", 1600);
+      haptic(6);
+    });
+  }
+  function lnLogicalLine(row1) {          // 1-based buffer row -> joined logical line
+    var buf = term.buffer.active;
+    function wrapped(i) { var l = buf.getLine(i); return !!(l && l.isWrapped); }
+    var start = row1 - 1, end = row1 - 1;
+    while (start > 0 && wrapped(start)) start--;
+    while (wrapped(end + 1)) end++;
+    var text = "";
+    for (var i = start; i <= end; i++) {
+      var line = buf.getLine(i);
+      if (!line) break;
+      var s = line.translateToString(true);
+      if (i < end) while (s.length < term.cols) s += " ";   // exact cols per row — index→cell math depends on it
+      text += s;
+    }
+    return { start: start, text: text };
+  }
+  function lnLink(start0, idx, len, label, act) {
+    var cols = term.cols || 80;
+    var last = idx + len - 1;
+    return {
+      range: { start: { x: (idx % cols) + 1,  y: start0 + Math.floor(idx / cols) + 1 },
+               end:   { x: (last % cols) + 1, y: start0 + Math.floor(last / cols) + 1 } },
+      text: label,
+      activate: function (ev) { if (ev && ev.preventDefault) ev.preventDefault(); act(); },
+      decorations: { pointerCursor: true, underline: true }
+    };
+  }
+  try {
+    term.registerLinkProvider({
+      provideLinks: function (row1, cb) {
+        var ll = lnLogicalLine(row1);
+        var cands = lnCandidates(ll.text);
+        if (!cands.length) { cb(undefined); return; }
+        var links = [], pending = 1;      // 1 = the enumeration itself
+        function done() { if (--pending === 0) cb(links.length ? links : undefined); }
+        cands.forEach(function (c) {
+          if (c.kind === "url") {
+            links.push(lnLink(ll.start, c.idx, c.raw.length, c.raw, function () {
+              window.open(c.raw, "_blank", "noopener");
+            }));
+            return;
+          }
+          pending++;
+          lnResolvePath(c.raw, function (p) {
+            if (p) links.push(lnLink(ll.start, c.idx, p.length, p, function () { lnDownload(p); }));
+            done();
+          });
+        });
+        done();
+      }
+    });
+  } catch (e) {}                          // bundle without link providers — feature just absent
+  // OSC 8 hyperlinks (some TUIs emit them) were dead without a handler.
+  try {
+    term.options.linkHandler = {
+      activate: function (ev, text) {
+        if (/^https?:\/\//i.test(text)) window.open(text, "_blank", "noopener");
+        else if (/^file:\/\//i.test(text)) {
+          try { lnDownload(decodeURIComponent(new URL(text).pathname)); } catch (e) {}
+        }
+      }
+    };
+  } catch (e) {}
+  // Test hook: headless smoke can't hover the canvas, so it runs a plain
+  // string through the same candidate + live-validation pipeline.
+  window._lnTest = {
+    scan: function (text, cb) {
+      var cands = lnCandidates(text);
+      var out = [], pending = 1;
+      function done() { if (--pending === 0) cb(out); }
+      cands.forEach(function (c) {
+        if (c.kind === "url") { out.push({ kind: "url", text: c.raw }); return; }
+        pending++;
+        lnResolvePath(c.raw, function (p) { if (p) out.push({ kind: "path", text: p }); done(); });
+      });
+      done();
+    },
+    dlUrl: function (p) { return "/tabs/dl?path=" + encodeURIComponent(p); }
   };
 
   /* ---------------------------------------------------------------------- *

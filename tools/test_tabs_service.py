@@ -189,6 +189,45 @@ class Library(unittest.TestCase):
         self.assertEqual(os.stat(p).st_mode & 0o777, 0o640)     # mode survives the atomic replace
 
 
+class TermLinks(unittest.TestCase):
+    """v21: /tabs/stat + /tabs/dl back the clickable file-links in terminal output."""
+    def test_dl_path_containment(self):
+        self.assertEqual(T.dl_path(os.path.join(FILES, "sub")), os.path.join(FILES, "sub"))
+        self.assertEqual(T.dl_path("~/note"), os.path.join(FILES, "note"))   # ~ expands to the home base
+        self.assertIsNone(T.dl_path("/etc/passwd"))
+        self.assertIsNone(T.dl_path(FILES + "XYZ/x"))                        # sibling prefix
+        self.assertIsNone(T.dl_path("relative/x"))
+        self.assertIsNone(T.dl_path(""))
+        self.assertIsNone(T.dl_path("/" + "x" * 1024))
+        self.assertIsNone(T.dl_path("/home/ubuntu/\x00etc"))                # embedded NUL -> no crash, no match
+        self.assertIsNone(T.dl_path("~root/x"))                             # only ~/ expands, not ~user
+        ln = os.path.join(FILES, "dl-esc")
+        if not os.path.islink(ln): os.symlink("/etc/passwd", ln)             # symlink out of base
+        self.assertIsNone(T.dl_path(ln))
+        self.assertTrue((T.dl_path("/tmp") or "").endswith("tmp"))          # /tmp is an allowed base
+
+    def test_stat_and_dl_http(self):
+        p = os.path.join(FILES, "dl-probe.md")
+        with open(p, "w") as f: f.write("dl-content")
+        # stat is ALWAYS 200 (hover-probe, fires constantly): ok/file in the body,
+        # never a status code. Containment failures surface as ok:false, not 403.
+        c, j = jreq("GET", "/tabs/stat?path=" + p)
+        self.assertEqual((c, j["ok"], j["file"], j["size"]), (200, True, True, 10))
+        c, j = jreq("GET", "/tabs/stat?path=" + os.path.join(FILES, "sub"))
+        self.assertEqual((c, j["ok"], j["file"]), (200, True, False))         # dirs: ok true, file false
+        c, j = jreq("GET", "/tabs/stat?path=" + os.path.join(FILES, "ghost"))
+        self.assertEqual((c, j["ok"]), (200, False))                         # missing: 200 ok:false
+        c, j = jreq("GET", "/tabs/stat?path=/etc/passwd")
+        self.assertEqual((c, j["ok"]), (200, False))                         # out-of-base: 200 ok:false
+        c, body = req("GET", "/tabs/dl?path=" + p)
+        self.assertEqual((c, body), (200, b"dl-content"))
+        self.assertEqual(jreq("GET", "/tabs/dl?path=/etc/passwd")[0], 403)
+        self.assertEqual(jreq("GET", "/tabs/dl?path=" + os.path.join(FILES, "sub"))[0], 404)  # dirs don't stream
+        # attachment disposition (the whole point vs the inline /tabs/file)
+        r = urllib.request.urlopen("http://127.0.0.1:%d/tabs/dl?path=%s" % (PORT, p), timeout=5)
+        self.assertIn("attachment", r.headers.get("Content-Disposition", ""))
+
+
 class Endpoints(unittest.TestCase):
     def test_tabs_degrades_gracefully_without_tmux(self):
         c, j = jreq("GET", "/tabs")                             # no tmux socket in the sandbox

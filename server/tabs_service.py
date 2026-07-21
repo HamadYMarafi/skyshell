@@ -4,7 +4,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote_plus
 # Env overrides exist so a STAGING instance can run beside prod (different port,
 # throwaway pin file / sandboxes) — defaults are the production values.
-BIND=("127.0.0.1",int(os.environ.get("TERM_TABS_PORT","7691"))); SOCK="/tmp/tmux-1001/default"; SESS="main"
+# The tmux socket MUST match the one ttyd's plain `tmux` uses (/tmp/tmux-<uid>) —
+# a hardcoded uid silently talks to a second tmux server on boxes with a
+# different first-user uid (stock Ubuntu = 1000, this box = 1001).
+BIND=("127.0.0.1",int(os.environ.get("TERM_TABS_PORT","7691"))); SOCK=os.environ.get("TERM_TABS_TMUX_SOCK",f"/tmp/tmux-{os.getuid()}/default"); SESS="main"
 TMUX=["tmux","-S",SOCK]
 FILES_BASE=os.path.realpath(os.environ.get("TERM_TABS_FILES_BASE","/home/ubuntu"))
 LIB_BASE=os.path.realpath(os.environ.get("TERM_TABS_LIB_BASE","/home/ubuntu/files"))
@@ -75,6 +78,21 @@ def _proxy_probe_loop():
         elif not ok:
             with LOCK: PROXY_STATE["geo"]=None   # route down — a remembered city would lie
         time.sleep(60)
+DL_BASES=[FILES_BASE,os.path.realpath("/tmp")]
+def dl_path(raw):
+    # Terminal path-links: the client sends the absolute (or ~/) path exactly as
+    # it appeared in terminal output. Realpath first, then containment against
+    # the home + /tmp bases — a symlink pointing outside resolves outside and
+    # is refused. No PIN gate by design: anyone past CF Access is the owner,
+    # and the terminal itself can already read these files.
+    if not raw or len(raw)>1024: return None
+    if raw=="~" or raw.startswith("~/"): raw=FILES_BASE+raw[1:]
+    if not raw.startswith("/"): return None
+    try: target=os.path.realpath(raw)       # embedded-NUL / odd input -> ValueError, treat as no match
+    except Exception: return None
+    for b in DL_BASES:
+        if target==b or target.startswith(b+os.sep): return target
+    return None
 def safe_path(rel):
     # Containment: os.path.join ignores its base arg when rel is absolute (the
     # classic bypass), but the startswith(base+sep) check below still rejects
@@ -213,6 +231,44 @@ class H(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-Type",ctype); self.send_header("Content-Length",str(size))
                 self.send_header("Content-Disposition",'inline; filename="%s"' % _dispo(os.path.basename(target)))
+                self.end_headers()
+                while True:
+                    chunk=f.read(65536)
+                    if not chunk: break
+                    self.wfile.write(chunk)
+        except (BrokenPipeError,ConnectionResetError): pass       # client disconnected mid-stream — normal
+        except Exception as e:
+            try: self._s(500,{"err":str(e)})
+            except Exception: pass
+    def _dl_stat(self,q):
+        # Hover validation for terminal path-links: only paths that stat as a
+        # real file get underlined client-side, so dead paths never look live.
+        # ALWAYS 200 (ok:false for out-of-base / missing / dir) — the linkifier
+        # fires this on every hover, so a 4xx here would spam nginx logs and, in
+        # the deploy smoke, trip the "no >=400 in-page response" gate. The real
+        # security boundary is /tabs/dl, which still 403s.
+        try:
+            raw=(parse_qs(q).get("path") or [""])[0]
+            target=dl_path(raw)
+            if target and os.path.isfile(target): self._s(200,{"ok":True,"file":True,"size":os.path.getsize(target)})
+            elif target and os.path.isdir(target): self._s(200,{"ok":True,"file":False})
+            else: self._s(200,{"ok":False})
+        except (BrokenPipeError,ConnectionResetError): pass
+        except Exception:
+            try: self._s(200,{"ok":False})
+            except Exception: pass
+    def _dl(self,q):
+        try:
+            raw=(parse_qs(q).get("path") or [""])[0]
+            target=dl_path(raw)
+            if target is None: self._s(403,{"err":"forbidden"}); return
+            if not os.path.isfile(target): self._s(404,{"err":"not found"}); return
+            size=os.path.getsize(target)
+            ctype=mimetypes.guess_type(target)[0] or "application/octet-stream"
+            with open(target,"rb") as f:
+                self.send_response(200)
+                self.send_header("Content-Type",ctype); self.send_header("Content-Length",str(size))
+                self.send_header("Content-Disposition",'attachment; filename="%s"' % _dispo(os.path.basename(target)))
                 self.end_headers()
                 while True:
                     chunk=f.read(65536)
@@ -403,6 +459,8 @@ class H(BaseHTTPRequestHandler):
         elif pth=="/tabs/sys/state": self._sys_state()
         elif pth=="/tabs/lib": self._lib_list()
         elif pth=="/tabs/lib/file": self._lib_file(pr.query)
+        elif pth=="/tabs/stat": self._dl_stat(pr.query)
+        elif pth=="/tabs/dl": self._dl(pr.query)
         else: self._s(404,{"error":"not found"})
     def do_POST(self):
         pr=urlparse(self.path); qs=parse_qs(pr.query); idx=(qs.get("index") or [""])[0]

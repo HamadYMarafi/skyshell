@@ -6,4 +6,6 @@ Type=oneshot
 User=ubuntu
 RuntimeDirectory=term-health
 RuntimeDirectoryPreserve=yes
+# optional: EGRESS_EXPECT and alert transport vars live here
+EnvironmentFile=-/home/ubuntu/.term-alert-env
 ExecStart=/home/ubuntu/term-ui/term-health.sh

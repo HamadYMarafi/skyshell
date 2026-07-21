@@ -39,8 +39,10 @@ hard residential-browser $'[Service]\nNoNewPrivileges=yes\nRestrictSUIDSGID=yes'
 
 echo "== [5/7] nginx: backup -> install -> test (self-restoring) =="
 sudo mkdir -p /etc/nginx/backups /etc/nginx/snippets
-sudo cp -a /etc/nginx/sites-enabled/term-ui /etc/nginx/backups/term-ui.bak-$TS
+sudo cp -a /etc/nginx/sites-enabled/term-ui /etc/nginx/backups/term-ui.bak-$TS 2>/dev/null || true
 sudo install -m 644 $R/infra/nginx/term-ui-headers.conf /etc/nginx/snippets/
+[ -f /etc/nginx/snippets/term-ui-auth.conf ] || sudo touch /etc/nginx/snippets/term-ui-auth.conf
+sudo install -m 644 $R/infra/nginx/term-jwt-map.conf /etc/nginx/conf.d/term-jwt-map.conf
 sudo install -m 644 $R/infra/nginx/term-ui.conf /etc/nginx/sites-enabled/term-ui
 if ! sudo nginx -t; then
   echo "nginx -t FAILED — restoring previous config"
