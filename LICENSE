@@ -19,11 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-Skyshell bundles or depends on third-party software under their own licenses,
-including xterm.js (MIT), ttyd (MIT), tmux (ISC), KasmVNC (GPLv2), tinyproxy
-(GPLv2), Playwright (Apache-2.0), cloudflared (Apache-2.0) and nginx (BSD-2).
-Those components remain under their respective licenses. License texts for the
-components bundled in this repo are reproduced in THIRD-PARTY-LICENSES.md.
