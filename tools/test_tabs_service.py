@@ -195,7 +195,10 @@ class TermLinks(unittest.TestCase):
         self.assertEqual(T.dl_path(os.path.join(FILES, "sub")), os.path.join(FILES, "sub"))
         self.assertEqual(T.dl_path("~/note"), os.path.join(FILES, "note"))   # ~ expands to the home base
         self.assertIsNone(T.dl_path("/etc/passwd"))
-        self.assertIsNone(T.dl_path(FILES + "XYZ/x"))                        # sibling prefix
+        self.assertIsNone(T.dl_path("/tmpXYZ/x"))                            # sibling prefix of an allowed base
+        if not os.path.realpath(FILES + "XYZ").startswith(                   # FILES-sibling probe is only
+                os.path.realpath("/tmp") + os.sep):                          # meaningful when it's outside the
+            self.assertIsNone(T.dl_path(FILES + "XYZ/x"))                    # /tmp base (CI + macOS tmpdirs)
         self.assertIsNone(T.dl_path("relative/x"))
         self.assertIsNone(T.dl_path(""))
         self.assertIsNone(T.dl_path("/" + "x" * 1024))
