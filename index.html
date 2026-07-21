@@ -1123,6 +1123,49 @@
   .ctx-note { padding: 6px 12px 4px; font-size: 11px; color: var(--overlay0); white-space: nowrap; }
 
   /* ======================================================================= *
+   * PASTE SHEET — OS-level clipboard fallback for when                      *
+   * navigator.clipboard.readText() is missing or rejected (iOS Safari).     *
+   * ======================================================================= */
+  #paste-sheet {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 93;
+    align-items: flex-start;
+    justify-content: center;
+    /* top-anchored, not centered: iOS never shrinks a fixed element's layout
+       box for the soft keyboard, so a vertically-centered sheet ends up
+       underneath it. --kb (soft-keyboard height, see applyViewport) pads the
+       bottom so the card stays above the keyboard instead. */
+    padding: 10vh 16px calc(var(--kb, 0px) + 16px);
+    background: rgba(17,17,27,.6);
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+  }
+  #paste-sheet.open { display: flex; }
+  .paste-card {
+    width: 100%;
+    max-width: 420px;
+    max-height: calc(var(--app-h, 100dvh) - 20vh);
+    overflow-y: auto;
+    background: var(--base);
+    border: 1px solid var(--surface0);
+    border-radius: var(--radius);
+    box-shadow: 0 30px 70px var(--shadow);
+    padding: 16px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .paste-hint { color: var(--subtext0); font-size: 13px; text-align: center; }
+  .paste-ta {
+    width: 100%; min-height: 96px; resize: none;
+    border: 1px solid var(--surface0); border-radius: var(--radius-sm); outline: none;
+    padding: 10px; background: var(--crust); color: var(--text);
+    font-family: var(--font-mono); font-size: 14px; line-height: 1.5;
+  }
+  .paste-ta:focus { border-color: var(--mauve); }
+  .paste-actions { display: flex; justify-content: flex-end; }
+
+  /* ======================================================================= *
    * INSTALL HINT (iOS A2HS + Android install affordance)                    *
    * ======================================================================= */
   #install-hint {
@@ -2680,6 +2723,17 @@
     <span class="c-label">tmux menu</span>
   </div>
   <div class="ctx-note">Tip: drag copies · ⌥-drag selects</div>
+</div>
+
+<!-- =================== PASTE SHEET (mobile fallback) =============== -->
+<div id="paste-sheet">
+  <div class="paste-card" id="paste-card" role="dialog" aria-modal="true" aria-label="Paste">
+    <div class="paste-hint" id="paste-hint">Long-press → Paste</div>
+    <textarea id="paste-input" class="paste-ta" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Paste text here"></textarea>
+    <div class="paste-actions">
+      <button class="mini-btn" id="paste-cancel">Cancel</button>
+    </div>
+  </div>
 </div>
 
 <!-- ======================= INSTALL HINT (A2HS) ==================== -->
@@ -4849,9 +4903,21 @@
      never loses focus (which would dismiss the iOS keyboard). */
   kbTray.addEventListener("pointerdown", function (e) {
     var key = e.target.closest ? e.target.closest("[data-seq],[data-mod],[data-act]") : null;
-    if (key) { e.preventDefault(); keyAction(key); return; }
+    if (key) {
+      e.preventDefault();
+      if (key.dataset.act !== "paste") keyAction(key);   // paste waits for click — see below
+      return;
+    }
     var col = e.target.closest ? e.target.closest("[data-collapse]") : null;
     if (col) { e.preventDefault(); collapseKeybar(); }
+  });
+  // iOS Safari rejects navigator.clipboard.readText() when it's triggered from a
+  // pointerdown (not a "real" gesture in its eyes) — preventDefault above still
+  // keeps the terminal focused / iOS keyboard up, but Paste itself runs from the
+  // click that pointerdown doesn't suppress (verified pattern, see typeBar ~4113).
+  kbTray.addEventListener("click", function (e) {
+    var key = e.target.closest ? e.target.closest('[data-act="paste"]') : null;
+    if (key) keyAction(key);
   });
 
   /* ----- drag / dock: pill (tap=expand, drag=move) and grip (move only) ----- */
@@ -5501,23 +5567,122 @@
       toast("Clipboard unavailable here", "err", 2200);
     }
   }
+  // Sticky-Ctrl must not transform a 1-char clipboard into a control byte on
+  // its way through onData — suspend it around the paste. Shared by every
+  // lane that feeds real text into the terminal (readText() success + the
+  // paste-sheet capture below) — including the 1,000,000-char trust-boundary
+  // cap, so a huge system clipboard can't wedge either lane.
+  function feedPaste(t) {
+    if (t.length > 1000000) {
+      var cut = 1000000;
+      var c = t.charCodeAt(cut - 1);
+      if (c >= 0xd800 && c <= 0xdbff) cut--;   // don't split a surrogate pair at the boundary
+      t = t.slice(0, cut);
+      toast("Pasted — clipboard truncated to 1,000,000 chars", "warn", 2600);
+    }
+    var heldCtrl = ctrlState; setCtrl(0);
+    try { term.paste(t); }              // through onData → sendInput (bracketed-paste safe)
+    catch (e) { sendInput(t); }
+    if (heldCtrl === 2) setCtrl(2);     // re-lock; a one-shot arm is consumed by the paste
+    haptic(8);
+  }
   function pasteClip() {
     if (navigator.clipboard && navigator.clipboard.readText) {
       navigator.clipboard.readText().then(function (t) {
         if (!t) return;
         if (clipTap) { clipTap("paste", t); return; }
-        // Sticky-Ctrl must not transform a 1-char clipboard into a control
-        // byte on its way through onData — suspend it around the paste.
-        var heldCtrl = ctrlState; setCtrl(0);
-        try { term.paste(t); }            // through onData → sendInput (bracketed-paste safe)
-        catch (e) { sendInput(t); }
-        if (heldCtrl === 2) setCtrl(2);   // re-lock; a one-shot arm is consumed by the paste
-        haptic(8);
-      }).catch(function () { toast("Paste blocked — use keyboard paste", "err", 2600); });
+        feedPaste(t);
+      }).catch(openPasteSheet);         // rejected (iOS Safari, near-always) — OS-level fallback
     } else {
-      toast("Paste unavailable here", "err", 2200);
+      openPasteSheet();                 // readText() doesn't exist at all — same fallback
     }
   }
+
+  // Paste sheet — the OS-level fallback. NOTE this opens ASYNCHRONOUSLY: the
+  // primary iOS lane reaches it from readText()'s rejected promise, a tick
+  // after the original tap/click — the "gesture" is long over by the time
+  // pasteInput.focus() runs. The iOS keyboard survives that anyway because
+  // it's an editable -> editable handoff (the terminal's own textarea was
+  // already focused, and iOS keeps the keyboard up across a focus move
+  // between two editable elements). The .paste-card pointerdown rescue below
+  // is the in-gesture backstop for the rare case that handoff doesn't hold.
+  var pasteSheet   = $("paste-sheet");
+  var pasteInput   = $("paste-input");
+  var pasteHint    = $("paste-hint");
+  var pasteCard    = $("paste-card");
+  var pasteInputTimer = 0;
+  var pasteLastLen = 0;                 // textarea length as of the last input/composition event
+  var pasteComposing = false;
+  var pasteSheetAt = 0;                 // performance.now() at open — gates the backdrop closer
+  function pasteSheetOpen() { return !!pasteSheet && pasteSheet.classList.contains("open"); }
+  function openPasteSheet() {
+    if (pasteSheetOpen()) return;                                   // idempotent: 2nd rejection can't wipe a live sheet
+    if (!pasteSheet || !pasteInput) { toast("Paste unavailable here", "err", 2200); return; }
+    pasteHint.textContent = IS_TOUCH ? "Long-press → Paste" : "Press ⌘V / Ctrl+V";
+    pasteInput.value = "";
+    pasteLastLen = 0;
+    pasteSheetAt = performance.now();
+    pasteSheet.classList.add("open");
+    pasteInput.focus();
+  }
+  function closePasteSheet() {
+    if (!pasteSheetOpen()) return;
+    clearTimeout(pasteInputTimer);
+    pasteSheet.classList.remove("open");
+    pasteInput.value = "";
+    term.focus();                       // editable -> editable keeps the iOS keyboard alive
+  }
+  function capturePaste(t) {
+    if (!pasteSheetOpen()) return;      // stray timer / test call after a close — never feed a dead sheet
+    if (!t) { closePasteSheet(); toast("Clipboard had no text", "warn", 1800); return; }
+    if (clipTap) clipTap("paste", t); else feedPaste(t);
+    closePasteSheet();
+  }
+  pasteInput.addEventListener("paste", function (e) {
+    clearTimeout(pasteInputTimer);
+    var cd = e.clipboardData || window.clipboardData;
+    e.preventDefault();
+    capturePaste(cd ? cd.getData("text") : "");
+  });
+  // iOS QuickType's Paste pill can insert text WITHOUT firing a `paste` event,
+  // so this is the fallback lane — but it must NOT auto-commit plain typing,
+  // a dictation pause, or an in-progress IME composition. Only arm the
+  // debounce when the insertion plausibly IS a paste: the browser says so
+  // (insertFromPaste) or a single event just dropped in a multi-char chunk
+  // (real typing/dictation lands ~1 char per event; QuickType drops the
+  // whole string in one). compositionstart/end bracket IME so its own
+  // multi-char commit is never mistaken for a paste.
+  pasteInput.addEventListener("compositionstart", function () { pasteComposing = true; clearTimeout(pasteInputTimer); });
+  pasteInput.addEventListener("compositionend", function () { pasteComposing = false; pasteLastLen = pasteInput.value.length; });
+  pasteInput.addEventListener("input", function (e) {
+    var val = pasteInput.value, delta = val.length - pasteLastLen;
+    pasteLastLen = val.length;
+    if (e.isComposing || pasteComposing) return;
+    clearTimeout(pasteInputTimer);
+    var looksPasted = e.inputType === "insertFromPaste" || delta > 1;
+    if (!looksPasted) return;           // plain typed char — leave the sheet open
+    pasteInputTimer = setTimeout(function () { capturePaste(pasteInput.value); }, 150);
+  });
+  pasteInput.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closePasteSheet(); }
+  });
+  // preventDefault on pointerdown (not click) keeps the iOS keyboard from
+  // dipping/flickering on the tap that's about to close the sheet anyway.
+  $("paste-cancel").addEventListener("pointerdown", function (e) { e.preventDefault(); });
+  $("paste-cancel").addEventListener("click", closePasteSheet);
+  pasteSheet.addEventListener("pointerdown", function (e) { if (e.target === pasteSheet) e.preventDefault(); });
+  pasteSheet.addEventListener("click", function (e) {
+    if (e.target !== pasteSheet) return;
+    if (performance.now() - pasteSheetAt < 350) return;   // swallow the 2nd tap of a double-tap-to-open
+    closePasteSheet();
+  });
+  // In-gesture focus rescue: if the async-open editable->editable handoff
+  // (see the comment above openPasteSheet) ever loses the keyboard, the very
+  // next tap anywhere on the card re-focuses the textarea synchronously,
+  // inside that tap's own gesture.
+  pasteCard.addEventListener("pointerdown", function () {
+    if (pasteSheetOpen() && document.activeElement !== pasteInput) pasteInput.focus();
+  });
 
   // OSC 52: tmux (set-clipboard + the xterm*:clipboard terminal-feature) emits
   // ESC ] 52 ; c ; <base64> BEL for every copy-mode / drag-select copy. The
@@ -5716,7 +5881,12 @@
       var bytes = new TextEncoder().encode(text), bin = "";
       for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
       term.write("\x1b]52;c;" + btoa(bin) + "\x07");
-    }
+    },
+    // Paste-sheet hooks: the smoke can't reach the OS clipboard either, so it
+    // drives the sheet's real capture path (capturePaste) directly.
+    sheetOpen: pasteSheetOpen,
+    sheetFeed: capturePaste,
+    sheetCancel: closePasteSheet
   };
 
   /* ---------------------------------------------------------------------- *
@@ -6074,6 +6244,7 @@
   document.addEventListener("keydown", function (e) {
     // Escape closes the top-most overlay, regardless of focus.
     if (e.key === "Escape") {
+      if (pasteSheetOpen())                     { closePasteSheet(); e.preventDefault(); return; }
       if (ctxOpen())                            { closeCtxMenu();  e.preventDefault(); return; }
       if (paletteOpen())                        { closePalette();  e.preventDefault(); return; }
       if (searchBar.classList.contains("open")) { closeSearch();   e.preventDefault(); return; }
@@ -6083,6 +6254,9 @@
       if (libraryOpen)                          { closeLibrary();  e.preventDefault(); return; }
       // otherwise Escape falls through to the terminal (a real key), unchanged.
     }
+    // Paste sheet is modal: Escape (handled above) closes it, everything else
+    // (⌘K, ⌘B, ⌘1-9…) is inert while it's open.
+    if (pasteSheetOpen()) return;
     var meta = e.metaKey || e.ctrlKey;
     if (!meta || e.altKey) return;
     var k = e.key.toLowerCase();

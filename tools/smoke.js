@@ -201,6 +201,51 @@ const BASE = process.env.BASE || 'http://127.0.0.1:8443';
     }
   }
 
+  // 3.9 paste sheet (v22): a REJECTED readText() must fall back to the OS-level
+  // paste sheet — same stub-clipboard discipline as 3.7 (stub readText, never
+  // seed writeText, always restore). sheetFeed drives the real capture path
+  // (capturePaste); the clipTap observer proves the text actually arrived
+  // there, same trick 3.7 uses for menu Paste.
+  try {
+    const fed = await page.evaluate(() => new Promise((res) => {
+      const orig = navigator.clipboard.readText.bind(navigator.clipboard);
+      const done = (v) => { navigator.clipboard.readText = orig; window._cbTest.tap(null); res(v); };
+      navigator.clipboard.readText = () => Promise.reject(new Error('smoke-reject'));
+      window._cbTest.run('paste');          // pasteClip() -> readText().catch(openPasteSheet)
+      const t0 = Date.now();
+      (function waitOpen() {
+        if (window._cbTest.sheetOpen()) {
+          window._cbTest.tap((kind, text) => { if (kind === 'paste') done(text); });
+          window._cbTest.sheetFeed('smoke-paste-α');
+          return;
+        }
+        if (Date.now() - t0 > 3000) return done('SHEET-NEVER-OPENED');
+        setTimeout(waitOpen, 50);
+      })();
+      setTimeout(() => done('TIMEOUT'), 4000);
+    }));
+    if (fed !== 'smoke-paste-α') fail.push('paste sheet feed: got ' + JSON.stringify(fed));
+
+    const cancelled = await page.evaluate(() => new Promise((res) => {
+      const orig = navigator.clipboard.readText.bind(navigator.clipboard);
+      navigator.clipboard.readText = () => Promise.reject(new Error('smoke-reject'));
+      window._cbTest.run('paste');
+      const t0 = Date.now();
+      (function waitOpen() {
+        if (window._cbTest.sheetOpen()) {
+          navigator.clipboard.readText = orig;
+          window._cbTest.sheetCancel();
+          const ta = document.querySelector('.xterm-helper-textarea');
+          return res({ open: window._cbTest.sheetOpen(), taFocused: !!ta && document.activeElement === ta });
+        }
+        if (Date.now() - t0 > 3000) { navigator.clipboard.readText = orig; return res({ open: null, taFocused: false }); }
+        setTimeout(waitOpen, 50);
+      })();
+    }));
+    if (cancelled.open !== false) fail.push('paste sheet: sheetCancel did not close it (open=' + cancelled.open + ')');
+    if (!cancelled.taFocused) fail.push('paste sheet: sheetCancel did not refocus the terminal');
+  } catch (e) { fail.push('paste sheet: ' + String(e).slice(0, 160)); }
+
   // 6. Live Browser panel
   try {
     await page.click('#btn-live-browser', { timeout: 5000 });
@@ -219,5 +264,5 @@ const BASE = process.env.BASE || 'http://127.0.0.1:8443';
 
   await browser.close();
   if (fail.length) { console.error('SMOKE FAIL\n - ' + fail.join('\n - ')); process.exit(1); }
-  console.log('SMOKE PASS  (ws + sw:' + expected + ' + tabs:' + tabs.length + ' + folder-endpoints + ctxmenu/clipboard + file-links + browser-panel + 0 errors)');
+  console.log('SMOKE PASS  (ws + sw:' + expected + ' + tabs:' + tabs.length + ' + folder-endpoints + ctxmenu/clipboard + paste-sheet + file-links + browser-panel + 0 errors)');
 })().catch(e => { console.error('SMOKE FATAL ' + String(e).slice(0, 300)); process.exit(1); });
