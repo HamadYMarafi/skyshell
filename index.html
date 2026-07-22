@@ -2851,6 +2851,7 @@
 <!-- ===================== xterm.js (same-origin) ==================== -->
 <script src="/assets/xterm.js"></script>
 <script src="/assets/xterm-addon-fit.js"></script>
+<script src="/assets/xterm-addon-webgl.js"></script>
 <!-- Search addon (UMD global: window.SearchAddon.SearchAddon). Optional — guarded in JS. -->
 <script src="/assets/xterm-addon-search.js"></script>
 
@@ -3120,6 +3121,26 @@
 
   var termEl = $("terminal");
   term.open(termEl);
+
+  /* GPU renderer (v25): the default DOM renderer re-lays-out the whole
+     viewport per redraw — under tmux mouse-scroll that was the input lag.
+     WebGL addon must load AFTER term.open. Any failure (no WebGL, context
+     lost, old GPU) falls back to the DOM renderer = exactly the old
+     behaviour, so this can only be an upgrade. */
+  var webglAddon = null;
+  try {
+    if (window.WebglAddon && window.WebglAddon.WebglAddon) {
+      webglAddon = new window.WebglAddon.WebglAddon();
+      webglAddon.onContextLoss(function () {
+        try { webglAddon.dispose(); } catch (e) {}
+        webglAddon = null;
+      });
+      term.loadAddon(webglAddon);
+    }
+  } catch (e) {
+    try { if (webglAddon) webglAddon.dispose(); } catch (e2) {}
+    webglAddon = null;
+  }
 
   /* Debounced fit that guards against zero/NaN dimensions. */
   var fitRAF = 0;
@@ -6385,7 +6406,12 @@
   // Refit once the Nerd Font actually arrives: xterm measures cell metrics at
   // open(), and on a cold cache the woff2 lands later — the grid stayed slightly
   // mis-sized until some incidental resize.
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { fit(); });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () {
+    fit();
+    // WebGL caches glyphs in a texture atlas — rebuild it once the Nerd Font
+    // actually arrives, or icons keep rendering with the fallback font.
+    try { if (webglAddon) webglAddon.clearTextureAtlas(); } catch (e) {}
+  });
   renderTabs(fallbackTabs());     // show something immediately
   refreshStats();                 // fill the identity strip before first WS open
   connect();                      // fetch token -> open ws -> auth -> stream

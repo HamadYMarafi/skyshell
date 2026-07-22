@@ -19,7 +19,7 @@
  *   - cross-origin               -> untouched
  * ======================================================================== */
 
-var CACHE = "term-shell-v24";   // v24: mobile paste actually works on iOS — paste sheet has a "Paste to terminal" commit button, no longer preventDefaults the native paste, and reads text back from the box (fixes "you pasted nothing")
+var CACHE = "term-shell-v25";   // v25: WebGL renderer — terminal painting moves off the DOM onto the GPU (xterm-addon-webgl 0.16, guarded DOM fallback); fixes scroll/input lag
 
 /* App shell + same-origin static assets to precache. Missing files are tolerated
    (Promise.allSettled) so a not-yet-deployed asset never blocks activation. */
@@ -30,6 +30,7 @@ var SHELL = [
   "/assets/xterm.js",
   "/assets/xterm.css",
   "/assets/xterm-addon-fit.js",
+  "/assets/xterm-addon-webgl.js",
   "/assets/xterm-addon-search.js",
   "/assets/JetBrainsMonoNerdFont.woff2",
   "/assets/icon-180.png",
