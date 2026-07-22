@@ -19,7 +19,7 @@
  *   - cross-origin               -> untouched
  * ======================================================================== */
 
-var CACHE = "term-shell-v23";   // v23: mobile — keybar Upload button (attach a file without leaving the terminal); tmux PageUp enters copy-mode so scrollback works on touch
+var CACHE = "term-shell-v24";   // v24: mobile paste actually works on iOS — paste sheet has a "Paste to terminal" commit button, no longer preventDefaults the native paste, and reads text back from the box (fixes "you pasted nothing")
 
 /* App shell + same-origin static assets to precache. Missing files are tolerated
    (Promise.allSettled) so a not-yet-deployed asset never blocks activation. */

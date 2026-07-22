@@ -1163,7 +1163,7 @@
     font-family: var(--font-mono); font-size: 14px; line-height: 1.5;
   }
   .paste-ta:focus { border-color: var(--mauve); }
-  .paste-actions { display: flex; justify-content: flex-end; }
+  .paste-actions { display: flex; justify-content: space-between; gap: 8px; }
 
   /* ======================================================================= *
    * INSTALL HINT (iOS A2HS + Android install affordance)                    *
@@ -2736,6 +2736,7 @@
     <textarea id="paste-input" class="paste-ta" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Paste text here"></textarea>
     <div class="paste-actions">
       <button class="mini-btn" id="paste-cancel">Cancel</button>
+      <button class="mini-btn accent" id="paste-go">Paste to terminal</button>
     </div>
   </div>
 </div>
@@ -5610,7 +5611,7 @@
   function pasteClip() {
     if (navigator.clipboard && navigator.clipboard.readText) {
       navigator.clipboard.readText().then(function (t) {
-        if (!t) return;
+        if (!t) { openPasteSheet(); return; }   // resolved empty/blocked → manual sheet, not a silent no-op
         if (clipTap) { clipTap("paste", t); return; }
         feedPaste(t);
       }).catch(openPasteSheet);         // rejected (iOS Safari, near-always) — OS-level fallback
@@ -5639,7 +5640,7 @@
   function openPasteSheet() {
     if (pasteSheetOpen()) return;                                   // idempotent: 2nd rejection can't wipe a live sheet
     if (!pasteSheet || !pasteInput) { toast("Paste unavailable here", "err", 2200); return; }
-    pasteHint.textContent = IS_TOUCH ? "Long-press → Paste" : "Press ⌘V / Ctrl+V";
+    pasteHint.textContent = IS_TOUCH ? "Long-press the box → Paste, then tap Paste to terminal" : "Press ⌘V / Ctrl+V, then Paste to terminal";
     pasteInput.value = "";
     pasteLastLen = 0;
     pasteSheetAt = performance.now();
@@ -5662,8 +5663,13 @@
   pasteInput.addEventListener("paste", function (e) {
     clearTimeout(pasteInputTimer);
     var cd = e.clipboardData || window.clipboardData;
-    e.preventDefault();
-    capturePaste(cd ? cd.getData("text") : "");
+    var direct = cd ? cd.getData("text") : "";
+    if (direct) { e.preventDefault(); capturePaste(direct); return; }   // desktop / clipboardData populated
+    // iOS: the paste event's clipboardData is usually EMPTY here — do NOT
+    // preventDefault. Let the text land in the textarea natively, then read it
+    // back a tick later. (preventDefault + empty getData was the "you pasted
+    // nothing" bug.) The commit button below is the deterministic backstop.
+    setTimeout(function () { if (pasteSheetOpen() && pasteInput.value) capturePaste(pasteInput.value); }, 0);
   });
   // iOS QuickType's Paste pill can insert text WITHOUT firing a `paste` event,
   // so this is the fallback lane — but it must NOT auto-commit plain typing,
@@ -5691,6 +5697,16 @@
   // dipping/flickering on the tap that's about to close the sheet anyway.
   $("paste-cancel").addEventListener("pointerdown", function (e) { e.preventDefault(); });
   $("paste-cancel").addEventListener("click", closePasteSheet);
+  // The reliable lane: commit whatever is in the box, independent of every
+  // paste/input-event quirk above. On iOS the native long-press Paste lands
+  // text in the textarea but often fires no usable paste event — this button is
+  // the deterministic way to submit it.
+  $("paste-go").addEventListener("pointerdown", function (e) { e.preventDefault(); });   // hold focus/keyboard
+  $("paste-go").addEventListener("click", function () {
+    var v = pasteInput.value;
+    if (!v) { toast("Nothing pasted yet — long-press the box, tap Paste, then this", "warn", 2400); return; }
+    capturePaste(v);
+  });
   pasteSheet.addEventListener("pointerdown", function (e) { if (e.target === pasteSheet) e.preventDefault(); });
   pasteSheet.addEventListener("click", function (e) {
     if (e.target !== pasteSheet) return;
