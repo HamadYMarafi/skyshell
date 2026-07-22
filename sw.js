@@ -19,7 +19,7 @@
  *   - cross-origin               -> untouched
  * ======================================================================== */
 
-var CACHE = "term-shell-v25";   // v25: WebGL renderer — terminal painting moves off the DOM onto the GPU (xterm-addon-webgl 0.16, guarded DOM fallback); fixes scroll/input lag
+var CACHE = "term-shell-v26";   // v26: wheel smoothing — frame-batched, backlog-capped 1-line scroll reports (no more rubber-band flings); pairs with the tmux 1-line wheel binds
 
 /* App shell + same-origin static assets to precache. Missing files are tolerated
    (Promise.allSettled) so a not-yet-deployed asset never blocks activation. */

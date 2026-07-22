@@ -3190,6 +3190,57 @@
     ws.send(textEncoder.encode(Command.RESIZE_TERMINAL + JSON.stringify({ columns: cols, rows: rows })));
   }
 
+  /* v26: wheel smoothing. When tmux owns the wheel (mouse tracking on), raw
+     trackpad floods queue scroll reports faster than the ~90ms link drains
+     them — the pane keeps scrolling after the gesture ends (rubber-banding).
+     Intercept wheel before xterm, accumulate pixel deltas, emit at most
+     MAX_PER_FRAME 1-line SGR wheel reports per animation frame, and clamp the
+     backlog so the pane always tracks the finger. tmux scrolls 1 line/report
+     (server/tmux.conf v26 binds). Any probe failure -> xterm's native path. */
+  (function () {
+    var MAX_PER_FRAME = 4, MAX_BACKLOG = 20;
+    var acc = 0, raf = 0, lastX = 1, lastY = 1;
+    function cell() {
+      try {
+        var c = term._core._renderService.dimensions.css.cell;
+        return (c && c.width > 0 && c.height > 0) ? c : null;
+      } catch (e) { return null; }
+    }
+    function tracking() {
+      try { return term.modes.mouseTrackingMode !== "none"; } catch (e) { return false; }
+    }
+    function pump() {
+      raf = 0;
+      var c = cell();
+      if (!c) { acc = 0; return; }
+      var lines = acc > 0 ? Math.floor(acc / c.height) : Math.ceil(acc / c.height);
+      if (!lines) return;
+      var n = Math.min(Math.abs(lines), MAX_PER_FRAME);
+      var seq = "\x1b[<" + (lines < 0 ? 64 : 65) + ";" + lastX + ";" + lastY + "M";
+      var out = "";
+      for (var i = 0; i < n; i++) out += seq;
+      sendInput(out);
+      acc -= n * c.height * (lines < 0 ? -1 : 1);
+      if (Math.abs(acc) >= c.height) raf = requestAnimationFrame(pump);
+    }
+    termEl.addEventListener("wheel", function (e) {
+      if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;  // zoom/selection combos -> native
+      if (!tracking()) return;             // local scrollback -> xterm native (already instant)
+      var c = cell();
+      if (!c) return;                      // xterm internals moved -> native
+      e.preventDefault(); e.stopPropagation();
+      var d = e.deltaY;
+      if (e.deltaMode === 1) d *= c.height; else if (e.deltaMode === 2) d *= c.height * term.rows;
+      acc += d;
+      var cap = c.height * MAX_BACKLOG;    // fling: drop what the link can't drain
+      if (acc > cap) acc = cap; else if (acc < -cap) acc = -cap;
+      var r = termEl.getBoundingClientRect();
+      lastX = Math.max(1, Math.min(term.cols, Math.ceil((e.clientX - r.left) / c.width)));
+      lastY = Math.max(1, Math.min(term.rows, Math.ceil((e.clientY - r.top) / c.height)));
+      if (!raf) raf = requestAnimationFrame(pump);
+    }, { capture: true, passive: false });
+  })();
+
   function connect() {
     clearTimeout(reconnectTimer);
     manualClose = false;
