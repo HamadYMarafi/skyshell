@@ -19,7 +19,7 @@
  *   - cross-origin               -> untouched
  * ======================================================================== */
 
-var CACHE = "term-shell-v22";   // v22: mobile paste fixed — kb-bar Paste fires on click not pointerdown, and a paste-sheet textarea (OS Paste affordance) backstops readText() when it's missing or rejected
+var CACHE = "term-shell-v23";   // v23: mobile — keybar Upload button (attach a file without leaving the terminal); tmux PageUp enters copy-mode so scrollback works on touch
 
 /* App shell + same-origin static assets to precache. Missing files are tolerated
    (Promise.allSettled) so a not-yet-deployed asset never blocks activation. */

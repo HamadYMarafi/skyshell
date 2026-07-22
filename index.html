@@ -2633,6 +2633,7 @@
 <div id="backdrop"></div>
 
 <!-- ===================== DYNAMIC KEY TOOLBAR ====================== -->
+<input type="file" id="term-upload-input" multiple hidden>
 <div id="keybar" aria-label="Terminal keys">
   <!-- collapsed pill (tap to expand, drag to move) -->
   <button class="kb-pill" id="kb-pill" aria-label="Show keyboard keys">
@@ -2651,6 +2652,9 @@
     </button>
     <button class="kb-key" data-act="paste" aria-label="Paste" title="Paste">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/></svg>
+    </button>
+    <button class="kb-key" data-act="upload" aria-label="Upload file" title="Upload file">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/></svg>
     </button>
     <span class="kb-sep"></span>
     <button class="kb-key wide" data-seq="esc">Esc</button>
@@ -4878,6 +4882,7 @@
     if (act === "copy")  { copySelection(); return; }
     if (act === "paste") { pasteClip(); flash(el); return; }
     if (act === "search"){ openSearch(); return; }
+    if (act === "upload"){ var fi = $("term-upload-input"); if (fi) fi.click(); return; }
     if (el.dataset.mod === "ctrl") { tapCtrl(); return; }
 
     var seq = el.dataset.seq;
@@ -4905,7 +4910,7 @@
     var key = e.target.closest ? e.target.closest("[data-seq],[data-mod],[data-act]") : null;
     if (key) {
       e.preventDefault();
-      if (key.dataset.act !== "paste") keyAction(key);   // paste waits for click — see below
+      if (key.dataset.act !== "paste" && key.dataset.act !== "upload") keyAction(key);   // paste + upload wait for click (iOS gesture) — see below
       return;
     }
     var col = e.target.closest ? e.target.closest("[data-collapse]") : null;
@@ -4916,9 +4921,24 @@
   // keeps the terminal focused / iOS keyboard up, but Paste itself runs from the
   // click that pointerdown doesn't suppress (verified pattern, see typeBar ~4113).
   kbTray.addEventListener("click", function (e) {
-    var key = e.target.closest ? e.target.closest('[data-act="paste"]') : null;
+    var key = e.target.closest ? e.target.closest('[data-act="paste"],[data-act="upload"]') : null;
     if (key) keyAction(key);
   });
+
+  /* Keybar Upload: pick file(s) and push them through the SAME upload+paste
+     queue drag-drop uses (window.termUploadFiles, defined by terminalDrop()
+     below) — attach a doc without leaving the terminal. Files land in ~/files
+     and each path is pasted at the prompt. */
+  (function () {
+    var fi = $("term-upload-input");
+    if (!fi) return;
+    fi.addEventListener("change", function () {
+      var tasks = [];
+      for (var i = 0; i < this.files.length; i++) tasks.push({ file: this.files[i] });
+      this.value = "";                          // reset so re-picking the same file re-fires change
+      if (tasks.length && window.termUploadFiles) window.termUploadFiles(tasks);
+    });
+  })();
 
   /* ----- drag / dock: pill (tap=expand, drag=move) and grip (move only) ----- */
   function setKeybarX(x) {
@@ -5450,6 +5470,7 @@
     // Test hook: directory entries can't be faked into a real DataTransfer, so
     // the deploy smoke drives synthetic drops through the same queue directly.
     window._tdTest = { enqueue: tdEnqueue, shellPath: shellPath, tapPaste: function (fn) { pasteTap = fn; } };
+    window.termUploadFiles = tdEnqueue;   // keybar Upload button → same upload+paste path as drag-drop
   })();
 
   var gotOutput = false, emptyTimer = 0;
